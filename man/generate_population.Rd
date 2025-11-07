@@ -14,9 +14,14 @@ generate_population(
   residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
   sd_y = 3,
   R2_target = 0.5,
+  no_tx = FALSE,
   seed = NULL,
   oracle = TRUE
 )
+}
+\arguments{
+\item{no_tx}{If TRUE, do not generate treatment assignment (Z) and
+set all outcomes to control potential outcome.}
 }
 \description{
 These strata are generated post-treatment, in that we generate

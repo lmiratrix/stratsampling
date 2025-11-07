@@ -2,14 +2,22 @@
 % Please edit documentation in R/est_functions.R
 \name{est_subset}
 \alias{est_subset}
-\title{(Baseline) function to calculate tau_hat_subset (the simple subset
-treatment effect estimator) assuming we have human-coded scores,
-Yobs, for a subsample of n<N chosen using SRS}
+\title{Simple subset coding estimator}
 \usage{
-est_subset(data, Yobs = "Yobs", S = "S", Z = "Z")
+est_subset(data, Yobs = "Yobs", S = "S", Z = "Z", finite_pop = FALSE)
+}
+\value{
+A data.frame with columns:
+\item{est}{the point estimate}
+\item{SE}{The SE of the estimator if everything were coded}
+\item{SEhat}{the estimated standard error of the estimator}
+\item{SEhat.full}{NA (not applicable for this estimator)}
+\item{SEhat.samp}{NA (not applicable for this estimator)}
+\item{S2.0}{the sample variance of the coded outcomes in the control group}
+\item{S2.1}{the sample variance of the coded outcomes in the treatment group}
 }
 \description{
-(Baseline) function to calculate tau_hat_subset (the simple subset
-treatment effect estimator) assuming we have human-coded scores,
-Yobs, for a subsample of n<N chosen using SRS
+This is the (Baseline) function to calculate tau_hat_subset (the
+simple subset treatment effect estimator) assuming we have
+human-coded scores, Yobs, for a subsample of n<N chosen using SRS
 }

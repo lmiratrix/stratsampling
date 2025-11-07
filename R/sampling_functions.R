@@ -148,8 +148,11 @@ generate_observed_sample <- function( dat, n_code,
 
 
 
-#' This method assumes we have Yobs known for everyone, and thus is
-#' oracle
+#' This method assumes we have Yobs known for everyone, and thus is an
+#' oracle.  It will look at the actual residuals (Yobs - Yhat) to
+#' determine optimal allocation of samples across strata (and
+#' treatment arms if Z passed) to minimize variance of the
+#' model-assisted estimator.
 #'
 #' @export
 calc_optimal_allocation_oracle <- function( dat, n_code,
@@ -199,11 +202,19 @@ calc_optimal_allocation_oracle <- function( dat, n_code,
     dplyr::summarise( N.zk = dplyr::n(),
                       var.resid = var(resid),
                       .groups = "drop") %>%
-    mutate( weight = N.zk * sqrt(var.resid)) %>%
+    mutate( weight = N.zk * sqrt(var.resid))
+  
+  if ( by_tx ) {
+    strat_counts <- strat_counts %>%
     group_by(.Z) %>%
     dplyr::mutate( prop = weight/sum(weight),
                    n.zk = round(prop * (n_code/2))) %>%
     ungroup()
+  } else {
+    strat_counts <- strat_counts %>%
+      mutate( prop = weight/sum(weight),
+              n.zk = round(prop * n_code))
+  }
   
   # Iteratively adjust allocations when n.zk > N.zk
   for(z in unique(strat_counts$.Z)) {

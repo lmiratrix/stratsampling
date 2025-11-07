@@ -8,17 +8,22 @@
 #' n_strat strata within the treated and control units separately, and
 #' then generate outcomes.   That said, DGP makes strata parameters
 #' the same for corresponding tx and co strata.
-#' 
+#'
 #' TODO: Review the DGP -- is what we want?
 #'
+#' @param no_tx If TRUE, do not generate treatment assignment (Z) and
+#'   set all outcomes to control potential outcome.
+#'   
 #' @export
-generate_population <- function(N, n_strat,
+generate_population <- function(N,
+                                n_strat,
                                 strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
                                 tau = 0,
                                 bias = c( "none", "moderate", "large", "extreme-contrast"),
                                 residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
                                 sd_y = 3,
                                 R2_target = 0.5,
+                                no_tx = FALSE,
                                 seed=NULL,
                                 oracle = TRUE # what does this parameter do?
 ) {
@@ -29,12 +34,16 @@ generate_population <- function(N, n_strat,
     
     if (!is.null(seed)){set.seed(seed)}
     
-    
-    Z = as.numeric( sample( N ) <= floor(N/2 ))
+    if ( no_tx ) {
+        Z = rep( 0, N ) 
+    } else { 
+        Z = as.numeric( sample( N ) <= floor(N/2 ))
+    }
     N1 = sum(Z == 1)
     N0 = sum(Z == 0)
     
-    # Calibrate baseline residual variance of predictions to achieve target R^2 between Yobs and Yhat (overall)
+    # Calibrate baseline residual variance of predictions to achieve
+    # target R^2 between Yobs and Yhat (overall)
     s2_sigma = R2_target * sd_y^2
     s2_eps = (1 - R2_target)*sd_y^2
     
@@ -45,9 +54,10 @@ generate_population <- function(N, n_strat,
     control_ids = which(Z == 0)
     strat[control_ids] = generate_strata_within_arm(N0, n_strat, strata_config)
     
-    treatment_ids = which(Z == 1)
-    strat[treatment_ids] = generate_strata_within_arm(N1, n_strat, strata_config)
-    
+    if ( N1 > 0 ) {
+        treatment_ids = which(Z == 1)
+        strat[treatment_ids] = generate_strata_within_arm(N1, n_strat, strata_config)
+    }
     
     # Calculate weights for when strata are unbalanced
     wts_tab = as.numeric(table(factor(strat, levels = 1:n_strat)))
@@ -109,9 +119,10 @@ generate_population <- function(N, n_strat,
     Yobs = ifelse(Z==1, Y1, Y0)
     
     #dat = data.frame(ID=1:N, Y0=Y0, Y1=Y1, Yhat0=Yhat0, Yhat1=Yhat1, strata=strat)
-    dat = data.frame(ID=1:N, Yobs=Yobs, Yhat=Yhat, Z=Z, strata=strat) %>%
-        dplyr::relocate( strata, ID ) %>%
-        dplyr::arrange( strata )
+    dat = data.frame( Yobs=Yobs, Yhat=Yhat, Z=Z, strata=strat) %>%
+        dplyr::arrange( strata ) %>%
+        mutate( ID = 1:n() ) %>%
+        dplyr::relocate( strata, ID ) 
     
     return(dat)
 }
@@ -129,7 +140,7 @@ generate_strata_within_arm <- function(N_arm, n_strat, strata_config) {
                        "balanced-approx" = sample(1:n_strat, size=N_arm, replace=TRUE,
                                                   prob=rep(1/n_strat, n_strat)),
                        "unbalanced" = sample(1:n_strat, size=N_arm, replace=TRUE,
-                                             prob=runif(n_strat, min=0.1, max=0.8))
+                                             prob=runif(n_strat, min=0.2, max=0.8))
     )
     
     return(strat_arm)

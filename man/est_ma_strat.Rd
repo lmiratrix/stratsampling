@@ -11,11 +11,30 @@ est_ma_strat(
   S = "S",
   Z = "Z",
   strata = "strata",
-  return_pieces = FALSE
+  return_pieces = FALSE,
+  finite_pop = FALSE
 )
+}
+\value{
+A data.frame with columns:
+\item{est}{the point estimate}
+\item{SE}{Not sure what this is.}
+\item{SEhat}{the estimated standard error of the estimator}
+\item{SEhat.full}{the estimated standard error component due to full coding variance
+(i.e., if we had coded everything)}
+\item{SEhat.samp}{the estimated standard error component due to sampling variance
+(i.e., due to only coding a subset of documents) HOW DIFFERENT FROM SEhat?}
+\item{S2.0}{the estimated population variance of the outcomes in the
+control group}
+\item{S2.1}{the estimated population variance of the outcomes in the
+treatment group}
 }
 \description{
 Function to calculate the model-assisted treatment effect estimator
-assuming we have K fixed strata and hand-coded scores for a subsample of n<N documents
-chosen by stratified random sampling (with fixed and known sampling probabilities)
+assuming we have K fixed strata and hand-coded scores for a
+subsample of n<N documents chosen by stratified random sampling
+(with fixed and known sampling probabilities).
+}
+\details{
+If strata set to null, then do the SRS version.
 }

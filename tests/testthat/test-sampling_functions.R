@@ -113,7 +113,11 @@ test_that("the optimal allocation sampling functions work", {
   
   dd <- calc_optimal_allocation_oracle( dta, n_code = 100, strata="SS", Z = "ZZ",
                                         return_counts = FALSE )
+  
+  table( dd$.strata, dd$pi )
   head( dd )
+  expect_equal( sum(dd$S), 100, tolerance = 0.02 )
+  
   dd$.s2 = interaction( dd$SS, dd$ZZ )
   tt <- table( dd$.s2, dd$S )
   tt
@@ -121,7 +125,20 @@ test_that("the optimal allocation sampling functions work", {
   expect_equal( as.numeric(tt[,2]),
                 calc$n.zk )
   
+
   
+  # No strata testing
+  dd <- calc_optimal_allocation_oracle( dta, n_code = 100, strata="SS", Z = NULL,
+                                        return_counts = FALSE )
+  head( dd )
+  table( dd$.strata, dd$pi )
+  d3 <- dd %>% group_by( .strata ) %>%
+    summarize( n_un = n_distinct(pi),
+               n = n(), 
+               n_samp = sum(S) )
+  d3
+  expect_equal( d3$n_un, c(1,1,1,1) )
+  expect_equal( sum(dd$S), 100, tolerance = 0.02 )
 })
 
 
