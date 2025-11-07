@@ -11,7 +11,8 @@ est_ma_strat(
   S = "S",
   Z = "Z",
   strata = "strata",
-  return_pieces = FALSE
+  return_pieces = FALSE,
+  finite_pop = FALSE
 )
 }
 \description{

@@ -6,7 +6,7 @@
 treatment effect estimator) assuming we have human-coded scores,
 Yobs, for a subsample of n<N chosen using SRS}
 \usage{
-est_subset(data, Yobs = "Yobs", S = "S", Z = "Z")
+est_subset(data, Yobs = "Yobs", S = "S", Z = "Z", finite_pop = FALSE)
 }
 \description{
 (Baseline) function to calculate tau_hat_subset (the simple subset

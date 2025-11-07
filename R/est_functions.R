@@ -5,11 +5,18 @@
 #'
 #' @export
 est_subset = function(data, Yobs = "Yobs",
-                          S = "S", Z = "Z") {
+                          S = "S", Z = "Z", finite_pop=FALSE) {
 
     data$Yobs = get_col_or_vector(data, Yobs)
     data$S    = get_col_or_vector(data, S)
     data$Z    = get_col_or_vector(data, Z)
+    
+    
+    if ( !is.null(Z) ) {
+        data$Z = get_col_or_vector(data, Z)
+    } else {
+        data$Z = 1
+    }
 
     n.code=sum(data$S)
     N=nrow(data)
@@ -25,19 +32,40 @@ est_subset = function(data, Yobs = "Yobs",
             .groups="drop"
         )
 
+    
+    if (finite_pop) { # add finite population correction when Z is fixed
+        var.hat = sum((est.part$N-est.part$n.z)/est.part$N * est.part$var.y.coded/est.part$n.z)
+        var = sum((est.part$N-est.part$n.z)/est.part$N * est.part$var.y/est.part$N)
+        
+    }
+    else if (!finite_pop){
+        var.hat = sum(est.part$var.y.coded/est.part$n.z)
+        var = sum(est.part$var.y/est.part$N)
+        
+    } 
+
+    if (nrow(est.part)>1){
     est = diff(est.part$Ybar.coded)
-    var = sum(est.part$var.y/est.part$N)
-
-    var.hat = sum(est.part$var.y.coded/est.part$n.z)
-
+        
     res <- data.frame( est=est,
                        SE = sqrt(var),
                        SEhat = sqrt(var.hat),
                        SEhat.full=NA,
                        SEhat.samp=NA,
-                       S2.0 = est.part$var.y.coded[[1]] ,
-                       S2.1 = est.part$var.y.coded[[2]] )
-
+                       S2.0 = est.part$var.y.coded[[1]],
+                       S2.1 = est.part$var.y.coded[[2]])
+    }
+    else if (nrow(est.part)==1){
+        est = est.part$Ybar.coded
+        
+        res <- data.frame( est=est,
+                           SE = sqrt(var),
+                           SEhat = sqrt(var.hat),
+                           SEhat.full=NA,
+                           SEhat.samp=NA,
+                           S2.0 = NA, 
+                           S2.1=NA)
+    }
 
     return( res )
 
@@ -52,7 +80,7 @@ est_subset = function(data, Yobs = "Yobs",
 est_ma_srs_old = function(data,
                           Yhat = "Yhat", Yobs = "Yobs",
                           S = "S", Z = "Z",
-                          return_pieces = FALSE ) {
+                          return_pieces = FALSE) {
 
   data$Yhat = get_col_or_vector(data, Yhat)
   data$Yobs = get_col_or_vector(data, Yobs)
@@ -88,6 +116,9 @@ est_ma_srs_old = function(data,
   var.hat.A = sum(est.part$var.y.coded/est.part$N)
   var.hat.B = sum( (est.part$N -est.part$n.z)/est.part$N * (est.part$var.resid.coded/est.part$n.z))
 
+  
+  
+ 
   res <- data.frame( est=est,
                      SE = sqrt(var),
                      SEhat = sqrt(var.hat.A + var.hat.B),
@@ -121,7 +152,7 @@ est_ma_strat = function(data = NULL,
                         Yhat = "Yhat", Yobs ="Yobs",
                         S = "S", Z = "Z",
                         strata = "strata",
-                        return_pieces = FALSE ) {
+                        return_pieces = FALSE, finite_pop=FALSE ) {
 
   if ( is.null( data ) ) {
     data = data.frame( Yhat = Yhat,
@@ -131,7 +162,7 @@ est_ma_strat = function(data = NULL,
     data$Yhat = get_col_or_vector(data, Yhat)
     data$Yobs = get_col_or_vector(data, Yobs)
     data$S    = get_col_or_vector(data, S)
-    data$Z    = get_col_or_vector(data, Z)
+    #data$Z    = get_col_or_vector(data, Z)
   }
 
   if ( !is.null(Z) ) {
@@ -200,9 +231,18 @@ est_ma_strat = function(data = NULL,
     mutate( S2.hat = (N.z/(N.z-1)) * ( Y2bar.obs - Ybar.obs^2 + pt.3 ),
             ney.hat = S2.hat / N.z )
 
+  
+  if (finite_pop) {
+      # Only sampling variance component (fixed treatment assignments)
+      var.hat = sum(est.part2$inner.z.coded)
+      var = sum(est.part2$inner.z)  # Oracle: only sampling component
+      
+  }
+  else if (!finite_pop) {
   var.hat.A = sum( est.part2$ney.hat )
   var.hat.B = sum( est.part2$inner.z.coded )
-
+  var.hat = var.hat.A + var.hat.B
+  
 
   # Oracle variance estimate
   # For oracle, calculate full (not stratified) statistics
@@ -212,10 +252,10 @@ est_ma_strat = function(data = NULL,
                       ney.y = var(Yobs) / N,
                       .groups = "drop" )
   var = sum( est.part2$inner.z ) + sum( oracle.var$ney.y )
-
+  }
 
   # Point estimate
-  if ( !is.null( Z ) ) {
+  if ( !is.null( Z ) & length(unique(data$Z))>1) {
     stopifnot( nrow(est.part2) == 2 )
     est = diff(est.part2$Ybar.adj)
   } else {
@@ -225,11 +265,11 @@ est_ma_strat = function(data = NULL,
 
   res <-  data.frame( est=est,
                       SE=sqrt(var),
-                      SEhat = sqrt(var.hat.A + var.hat.B),
-                      SEhat.full = sqrt(var.hat.A),
-                      SEhat.samp = sqrt(var.hat.B) )
+                      SEhat = sqrt(var.hat),
+                      SEhat.full = ifelse(finite_pop,0,sqrt(var.hat.A)),
+                      SEhat.samp = ifelse(finite_pop, sqrt(var.hat), sqrt(var.hat.B) ))
 
-  if ( !is.null( Z ) ) {
+  if ( !is.null( Z ) & length(unique(data$Z))>1) {
     res$S2.0 = est.part2$S2.hat[[1]]
     res$S2.1 = est.part2$S2.hat[[2]] # Est population variance
   } else {
@@ -256,7 +296,7 @@ est_ma_strat = function(data = NULL,
 #' @export
 est_ma_srs = function(data,
                       Yhat = "Yhat", Yobs = "Yobs",
-                      S = "S", Z = "Z") {
+                      S = "S", Z = "Z",finite_pop=FALSE) {
 
-  est_ma_strat( data, Yhat=Yhat, Yobs=Yobs, S=S, Z=Z, strata=NULL )
+  est_ma_strat( data, Yhat=Yhat, Yobs=Yobs, S=S, Z=Z, strata=NULL,finite_pop=finite_pop )
 }

@@ -129,7 +129,7 @@ generate_strata_within_arm <- function(N_arm, n_strat, strata_config) {
                        "balanced-approx" = sample(1:n_strat, size=N_arm, replace=TRUE,
                                                   prob=rep(1/n_strat, n_strat)),
                        "unbalanced" = sample(1:n_strat, size=N_arm, replace=TRUE,
-                                             prob=runif(n_strat, min=0.1, max=0.8))
+                                             prob=runif(n_strat, min=0.2, max=0.8))
     )
     
     return(strat_arm)
