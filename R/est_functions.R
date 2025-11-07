@@ -91,73 +91,6 @@ est_subset = function( data, Yobs = "Yobs",
   
 }
 
-#' (Baseline) function to calculate tau_hat_ma (the model-assisted
-#' treatment effect estimator) assuming we have human-coded scores,
-#' Yobs, for a subsample of n<N documents plus predicted scores for all
-#' N documents, with the subsample chosen using SRS
-#'
-#' @export
-est_ma_srs_old = function(data,
-                          Yhat = "Yhat", Yobs = "Yobs",
-                          S = "S", Z = "Z",
-                          return_pieces = FALSE) {
-  
-  data$Yhat = get_col_or_vector(data, Yhat)
-  data$Yobs = get_col_or_vector(data, Yobs)
-  data$S    = get_col_or_vector(data, S)
-  data$Z    = get_col_or_vector(data, Z)
-  
-  n.code=sum(data$S)
-  N=nrow(data)
-  data$pi = rep(n.code/N, N)
-  
-  est.part = data %>%
-    group_by( Z ) %>%
-    dplyr::summarise( # First calculate effect estimate using model-assisted estimator
-      Ybar = mean( Yhat ),
-      adj = weighted.mean( Yobs[S==1] - Yhat[S==1],  w=1/pi[S==1] ),
-      Ybar.adj = Ybar + adj,
-      
-      # Next calculate "true" variance of tau.hat
-      N = n(),
-      var.y = var(Yobs),
-      var.resid = var(Yobs-Yhat),
-      
-      # Finally, calculate the estimated variance of tau.hat based on partial coding
-      var.y.coded = var(Yobs[S==1]),
-      n.z = sum(S),
-      var.resid.coded = var(Yobs[S==1] - Yhat[S==1]),
-      .groups="drop"
-    )
-  
-  est = diff(est.part$Ybar.adj)
-  var = sum(est.part$var.y/est.part$N) + sum( (est.part$N - est.part$n.z)/est.part$N * (est.part$var.resid/est.part$n.z))
-  
-  var.hat.A = sum(est.part$var.y.coded/est.part$N)
-  var.hat.B = sum( (est.part$N -est.part$n.z)/est.part$N * (est.part$var.resid.coded/est.part$n.z))
-  
-  
-  
-  
-  res <- data.frame( est=est,
-                     SE = sqrt(var),
-                     SEhat = sqrt(var.hat.A + var.hat.B),
-                     SEhat.full = sqrt(var.hat.A),
-                     SEhat.samp = sqrt(var.hat.B),
-                     S2.0 = est.part$var.y.coded[[1]] ,
-                     S2.1 = est.part$var.y.coded[[2]] )
-  
-  if ( return_pieces ) {
-    return( list( res = res,
-                  est.part = est.part ) )
-  }
-  
-  return( res )
-  
-}
-
-
-
 
 
 
@@ -324,12 +257,92 @@ est_ma_strat = function(data = NULL,
 
 
 
-
+#' Calculate treatment impacts with SRS sample
+#' 
+#' (Baseline) function to calculate tau_hat_ma (the model-assisted
+#' treatment effect estimator) assuming we have human-coded scores,
+#' Yobs, for a subsample of n<N documents plus predicted scores for all
+#' N documents, with the subsample chosen using SRS
 #'
 #' @export
 est_ma_srs = function(data,
                       Yhat = "Yhat", Yobs = "Yobs",
                       S = "S", Z = "Z",finite_pop=FALSE) {
   
-  est_ma_strat( data, Yhat=Yhat, Yobs=Yobs, S=S, Z=Z, strata=NULL,finite_pop=finite_pop )
+  est_ma_strat( data, Yhat=Yhat, Yobs=Yobs, S=S, Z=Z, strata=NULL, finite_pop=finite_pop )
 }
+
+
+
+
+
+
+# Old code ----
+
+
+#' (Baseline) function to calculate tau_hat_ma (the model-assisted
+#' treatment effect estimator) assuming we have human-coded scores,
+#' Yobs, for a subsample of n<N documents plus predicted scores for all
+#' N documents, with the subsample chosen using SRS
+#'
+#' @export
+est_ma_srs_old = function(data,
+                          Yhat = "Yhat", Yobs = "Yobs",
+                          S = "S", Z = "Z",
+                          return_pieces = FALSE) {
+  
+  data$Yhat = get_col_or_vector(data, Yhat)
+  data$Yobs = get_col_or_vector(data, Yobs)
+  data$S    = get_col_or_vector(data, S)
+  data$Z    = get_col_or_vector(data, Z)
+  
+  n.code=sum(data$S)
+  N=nrow(data)
+  data$pi = rep(n.code/N, N)
+  
+  est.part = data %>%
+    group_by( Z ) %>%
+    dplyr::summarise( # First calculate effect estimate using model-assisted estimator
+      Ybar = mean( Yhat ),
+      adj = weighted.mean( Yobs[S==1] - Yhat[S==1],  w=1/pi[S==1] ),
+      Ybar.adj = Ybar + adj,
+      
+      # Next calculate "true" variance of tau.hat
+      N = n(),
+      var.y = var(Yobs),
+      var.resid = var(Yobs-Yhat),
+      
+      # Finally, calculate the estimated variance of tau.hat based on partial coding
+      var.y.coded = var(Yobs[S==1]),
+      n.z = sum(S),
+      var.resid.coded = var(Yobs[S==1] - Yhat[S==1]),
+      .groups="drop"
+    )
+  
+  est = diff(est.part$Ybar.adj)
+  var = sum(est.part$var.y/est.part$N) + sum( (est.part$N - est.part$n.z)/est.part$N * (est.part$var.resid/est.part$n.z))
+  
+  var.hat.A = sum(est.part$var.y.coded/est.part$N)
+  var.hat.B = sum( (est.part$N -est.part$n.z)/est.part$N * (est.part$var.resid.coded/est.part$n.z))
+  
+  
+  
+  
+  res <- data.frame( est=est,
+                     SE = sqrt(var),
+                     SEhat = sqrt(var.hat.A + var.hat.B),
+                     SEhat.full = sqrt(var.hat.A),
+                     SEhat.samp = sqrt(var.hat.B),
+                     S2.0 = est.part$var.y.coded[[1]] ,
+                     S2.1 = est.part$var.y.coded[[2]] )
+  
+  if ( return_pieces ) {
+    return( list( res = res,
+                  est.part = est.part ) )
+  }
+  
+  return( res )
+  
+}
+
+
