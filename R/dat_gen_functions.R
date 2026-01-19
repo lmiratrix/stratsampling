@@ -1,60 +1,24 @@
 # Code to generate fake data for simulation
 
 
-#' Generate a population with strata and outcomes and
-#' surrogate/predicted outcomes that depend on strata.
-#'
-#' These strata are generated post-treatment, in that we generate
-#' n_strat strata within the treated and control units separately, and
-#' then generate outcomes.   That said, DGP makes strata parameters
-#' the same for corresponding tx and co strata.
-#'
-#' TODO: Review the DGP -- is what we want?
-#'
-#' @param no_tx If TRUE, do not generate treatment assignment (Z) and
-#'   set all outcomes to control potential outcome.
-#'   
-#' @export
-generate_population <- function(N,
-                                 n_strat,
-                                 strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
-                                 tau = 0,
-                                 bias = c( "none", "moderate", "large", "extreme-contrast"),
-                                 residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
-                                 sd_y = 3,
-                                 R2_target = 0.5,
-                                 no_tx = FALSE,
-                                 seed=NULL,
-                                 oracle = TRUE # what does this parameter do?
-) {
+
+
+generate_surrogate_noise <- function( N,
+                                      n_strat,
+                                      strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
+                                      bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                      residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
+                                      sd_y = 3,
+                                      R2_target = 0.5 ) {
     
     strata_config = match.arg(strata_config)
     bias = match.arg(bias)
     residual_var = match.arg(residual_var)
     
-    if (!is.null(seed)){set.seed(seed)}
-    
-    if ( no_tx ) {
-        Z = rep( 0, N ) 
-    } else { 
-        Z = as.numeric( sample( N ) <= floor(N/2 ))
-    }
-    N1 = sum(Z == 1)
-    N0 = sum(Z == 0)
-    
-    
     # Generate strata (separately within treatment arms)
-    strat = numeric(N)
+    strat = generate_strata_within_arm(N, n_strat, strata_config)
     
-    control_ids = which(Z == 0)
-    strat[control_ids] = generate_strata_within_arm(N0, n_strat, strata_config)
-    
-    if ( N1 > 0 ) {
-        treatment_ids = which(Z == 1)
-        strat[treatment_ids] = generate_strata_within_arm(N1, n_strat, strata_config)
-    }
-    
-    # Calculate weights for when strata are unbalanced
+    # Calculate weights for strata
     wts_tab = as.numeric(table(factor(strat, levels = 1:n_strat)))
     wts =  wts_tab / sum(wts_tab)
     
@@ -68,7 +32,7 @@ generate_population <- function(N,
                          "heterogeneous" = seq(0.25, 4, length=n_strat),
                          "extreme-contrast"=c(0.1, rep(1, n_strat-2), 10))
     
-    # Normalize to mean 1 (to preserve the target R^2)
+    # Normalize to mean 1 (so we can preserve the target R^2)
     err_var = err_var_raw / sum(err_var_raw * wts) 
     
     
@@ -111,24 +75,102 @@ generate_population <- function(N,
     b = c * b
     sigma_eps = c * sqrt(err_var)
     
-    # human-coded outcomes
-    Y0 = rnorm(N, 0, sd=sd_y) 
-    Y1 = Y0 + tau
-    
-    Yobs = ifelse(Z==1, Y1, Y0)
-    
     # stratum-specific residual variance
     eps = rnorm(N, 0, sd=sigma_eps[as.integer(strat)])
     
     # ML predictions with bias
-    Yhat = Yobs + b[as.integer(strat)] + eps
+    strat_noise = b[as.integer(strat)] + eps
     
+    dat = data.frame( strata=strat, 
+                      e = strat_noise ) %>%
+        dplyr::arrange( strata ) 
     
-    #dat = data.frame(ID=1:N, Y0=Y0, Y1=Y1, Yhat0=Yhat0, Yhat1=Yhat1, strata=strat)
-    dat = data.frame( Yobs=Yobs, Yhat=Yhat, Z=Z, strata=strat) %>%
-        dplyr::arrange( strata ) %>%
+    return(dat)
+}
+
+
+#' Generate a population with strata and outcomes and
+#' surrogate/predicted outcomes that depend on strata.
+#'
+#' These strata are generated post-treatment, in that we generate
+#' n_strat strata within the treated and control units separately, and
+#' then generate outcomes.
+#'
+#' @param no_tx If TRUE, do not generate treatment assignment (Z) and
+#'   set all outcomes to control potential outcome.
+#'
+#' @export
+generate_population <- function(N,
+                                n_strat,
+                                strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
+                                tau = 0,
+                                bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
+                                sd_y = 3,
+                                R2_target = 0.5,
+                                no_tx = FALSE,
+                                seed=NULL,
+                                oracle = TRUE # what does this parameter do?
+) {
+    
+    strata_config = match.arg(strata_config)
+    bias = match.arg(bias)
+    residual_var = match.arg(residual_var)
+    
+    if (!is.null(seed)){set.seed(seed)}
+    
+    # Generate the human-coded data
+    Y0 = rnorm(N, 0, sd=sd_y) 
+    Y1 = Y0 + tau
+    
+    if ( no_tx ) {
+        Z = rep( 0, N ) 
+    } else {
+        # Randomize 50% to treatment
+        Z = as.numeric( sample( N ) <= floor(N/2 ))
+    }
+    
+    Yobs = ifelse(Z==1, Y1, Y0)
+    
+    dat = data.frame( Y0=Y0, Y1=Y1, Yobs=Yobs, Z=Z ) %>%
+        arrange( Z )
+    
+    N1 = sum(dat$Z == 1)
+    N0 = sum(dat$Z == 0)
+    
+    dat$Yhat = rep( NA, N )
+    dat$strata = rep( NA, N )
+    
+    strat = generate_surrogate_noise( N = N0,
+                                      n_strat = n_strat,
+                                      strata_config = strata_config,
+                                      bias = bias,
+                                      residual_var = residual_var,
+                                      sd_y = sd_y,
+                                      R2_target = R2_target )
+    
+    # ML predictions with bias
+    dat$Yhat[ dat$Z == 0 ] = dat$Yobs[ dat$Z == 0 ] + strat$e
+    dat$strata[ dat$Z == 0 ] = strat$strata
+    
+    if ( N1 > 0 ) {
+        strat1 = generate_surrogate_noise( N = N0,
+                                           n_strat = n_strat,
+                                           strata_config = strata_config,
+                                           bias = bias,
+                                           residual_var = residual_var,
+                                           sd_y = sd_y,
+                                           R2_target = R2_target )
+        
+        # ML predictions with bias
+        dat$Yhat[ dat$Z == 1 ] = dat$Yobs[ dat$Z == 1 ] + strat1$e
+        dat$strata[ dat$Z == 1 ] = strat1$strata
+    }
+    
+    dat = dat %>%
+        dplyr::arrange( Z, strata ) %>%
         mutate( ID = 1:n() ) %>%
-        dplyr::relocate( strata, ID ) 
+        dplyr::relocate( Z, strata, ID ) 
     
     return(dat)
 }
@@ -154,3 +196,118 @@ generate_strata_within_arm <- function(N_arm, n_strat, strata_config) {
 }
 
 
+
+#' Describe the DGP population defined by set parameters
+#' 
+#' Utility function to explore the different simulation factors
+#' 
+#' @export
+describe_population <- function(n_strat,
+                                strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
+                                tau = 0,
+                                bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
+                                sd_y = 3,
+                                R2_target = 0.5,
+                                no_tx = FALSE,
+                                seed=NULL,
+                                verbose = FALSE ) {
+    
+    if ( is.data.frame(n_strat) ) {
+        dat = n_strat 
+    } else {
+    dat = generate_population(N=100000,
+                              n_strat=n_strat,
+                              strata_config=strata_config,
+                              tau=tau,
+                              bias=bias,
+                              residual_var=residual_var,
+                              sd_y=sd_y,
+                              R2_target=R2_target,
+                              no_tx=no_tx,
+                              seed=seed )
+    }
+    
+    sum <- dat %>%
+        group_by( Z, strata ) %>%
+        summarize( b = mean( Yhat - Yobs ),
+                   sd_e = sd( Yhat - Yobs ),
+                   n = n(), .groups = "drop" ) %>%
+        group_by( Z ) %>%
+        mutate( w = n / sum(n) )
+    
+    if ( verbose ) {
+        print( knitr::kable( sum, digits = 2) )
+    }
+    
+    agg <- sum %>%
+        group_by( Z ) %>%
+        summarise( Var_b = sum( w * b^2 ),
+                   E_sig2 = sum( w * sd_e^2 ), .groups = "drop" ) %>%
+        mutate( prop_bias = Var_b / (Var_b + E_sig2),
+                R2 = 1 - (Var_b+E_sig2) / var( dat$Yobs ) ) %>%
+        summarize( across( everything(), mean ) )
+    
+    if ( verbose ) {
+        print( knitr::kable( agg, digits = 3) )
+    }
+    agg        
+}
+
+
+
+
+
+# Demo code ---- 
+
+if ( FALSE ) {
+    
+    library( tidyverse )
+    dd <- generate_population(N=1000,
+                              n_strat=4,
+                              strata_config="unbalanced",
+                              tau=2,
+                              bias="large",
+                              residual_var="heterogeneous",
+                              sd_y=3,
+                              R2_target=0.8,
+                              no_tx=FALSE,
+                              seed=1234)
+    table( dd$strata, dd$Z )
+    
+    
+    # Call describe_population on all the values for the arguments
+    
+    grid <- expand_grid(
+        n_strat = 4,
+        #strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
+        strata_config = "balanced-exact",
+        tau = c(0),
+        bias = c( "none", "moderate", "large", "extreme-contrast"),
+        residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
+        sd_y = c(3),
+        R2_target = c(0.8)
+    )
+    
+    results <- grid %>%
+        rowwise() %>%
+        mutate( desc = list( describe_population( n_strat = n_strat,
+                                                  strata_config = strata_config,
+                                                  tau = tau,
+                                                  bias = bias,
+                                                  residual_var = residual_var,
+                                                  sd_y = sd_y,
+                                                  R2_target = R2_target,
+                                                  no_tx = FALSE,
+                                                  seed=1234,
+                                                  verbose = FALSE ) ) ) %>%
+        unnest( desc )
+    
+    results <- results %>%
+        dplyr::select( -Z, -n_strat, -tau, - sd_y, -R2_target )
+    
+    results %>%
+        knitr::kable( digits=2 )
+    
+    ggplot( results)
+}

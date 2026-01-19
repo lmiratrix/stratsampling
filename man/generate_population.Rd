@@ -26,9 +26,5 @@ set all outcomes to control potential outcome.}
 \description{
 These strata are generated post-treatment, in that we generate
 n_strat strata within the treated and control units separately, and
-then generate outcomes.   That said, DGP makes strata parameters
-the same for corresponding tx and co strata.
-}
-\details{
-TODO: Review the DGP -- is what we want?
+then generate outcomes.
 }

@@ -42,3 +42,101 @@ test_that("DGP works", {
 
 
 
+test_that( "DGP controls variance correctly", {
+  
+  set.seed( 53434 )
+  
+  library( tidyverse )
+  dd <- generate_population(N=1000,
+                            n_strat=4,
+                            strata_config="unbalanced",
+                            tau=2,
+                            bias="large",
+                            residual_var="heterogeneous",
+                            sd_y=3,
+                            R2_target=0.8,
+                            no_tx=FALSE )
+  tt <- table( dd$strata, dd$Z )
+  tt
+  
+  expect_true( sd( tt ) > 20 )
+  
+  ds <- dd %>% group_by( Z ) %>%
+    summarise( sd = sd( Yobs ) )
+  ds
+  
+  expect_equal( ds$sd, c( 3, 3 ), tolerance = 0.05 )  
+
+  M = lm( Yobs ~ Z + Yhat, data=dd )
+  s <- summary( M )  
+  s
+  #expect_equal( s$r.squared, 0.8, tolerance = 0.1 )  
+  var( dd$Yhat - dd$Yobs ) / var( dd$Yobs )
+  expect_equal( 1 - var( dd$Yhat - dd$Yobs ) / var( dd$Yobs ), 0.8, tolerance = 0.025 )
+  
+  
+  set.seed( 53434 )
+  
+  dd <- generate_population(N=10000,
+                            n_strat=4,
+                            strata_config="balanced-exact",
+                            tau=2,
+                            bias="extreme-contrast",
+                            residual_var="extreme-contrast",
+                            sd_y=10,
+                            R2_target=0.30,
+                            no_tx=TRUE )
+  tt <- table( dd$strata, dd$Z )
+  expect_equal( sd( tt ), 0 )
+  
+  ds <- dd %>% group_by( Z ) %>%
+    summarise( sd = sd( Yobs ) )
+  expect_equal( ds$sd, 10, tolerance = 0.01 )  
+  
+  M = lm( Yobs ~ Yhat, data=dd )
+  s <- summary( M )  
+  s
+  
+  e = dd$Yobs - dd$Yhat
+  var( e )
+  var( e ) / var( dd$Yobs )
+  #expect_equal( s$r.squared, 0.8, tolerance = 0.1 )  
+  var( dd$Yhat - dd$Yobs ) / var( dd$Yobs )
+  expect_equal( 1 - var( dd$Yhat - dd$Yobs ) / var( dd$Yobs ), 0.3, tolerance = 0.05 )
+  
+  
+  
+  
+  # Third, most extreme test
+  set.seed( 534344 )
+  
+  dd <- generate_population(N=5000,
+                            n_strat=4,
+                            strata_config="unbalanced",
+                            tau=2,
+                            bias="extreme-contrast",
+                            residual_var="extreme-contrast",
+                            sd_y=10,
+                            R2_target=0.55,
+                            no_tx=TRUE )
+  tt <- table( dd$strata, dd$Z )
+  tt
+  
+  expect_true( sd( tt ) > 40 )
+  
+  ds <- dd %>% group_by( Z ) %>%
+    summarise( sd = sd( Yobs ) )
+  ds
+  
+  expect_equal( ds$sd, 10, tolerance = 0.01 )  
+  
+  M = lm( Yobs ~ Yhat, data=dd )
+  s <- summary( M )  
+  s
+  
+  #expect_equal( s$r.squared, 0.8, tolerance = 0.1 )  
+  var( dd$Yhat - dd$Yobs ) / var( dd$Yobs )
+  expect_equal( 1 - var( dd$Yhat - dd$Yobs ) / var( dd$Yobs ), 0.55, tolerance = 0.025 )
+  
+  
+})
