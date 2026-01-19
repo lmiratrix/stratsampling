@@ -44,11 +44,22 @@ type_score <- type_object(
 
   When evaluating an essay, first code for the 4 dimensions above. Then derive an overall quality score as a function of the dimension scores (claims, reason, ending,
   clarity/voice). Note that the term `XXX` in an essay indicates a word that was not legible or could not be transcribed from the handwritten essays.
-  Present your response as a numerical value. Provide only the overall score for each essay, without any explanation or additional text.
+  Present your response as a numerical value. 
+  
+  In addition, provide a confidence rating for each essay indicating how confident you are in your quality score on a scale from 0-100, where: 
+   - 86-100: Very confident, clear-cut case
+   - 70-85: Fairly confident, minor ambiguity
+   - 50-69: Moderate confidence, could reasonably be adjacent score
+   - Below 50: Low confidence, difficult to assess
+   
+   Provide only the overall score and confidence rating for each essay, without any explanation or additional text.
 
   ",
   quality_score = type_number(
     "Holistic essay quality score, ranging from 0 to 8"
+  ),
+  confidence_rating=type_number(
+      "Confidence rating, ranging from 0 to 100"
   )
 )
 
@@ -60,14 +71,50 @@ sum(out$cost) # how much did running this cost?
 
 all.equal(dat$s_id, input$s_id)
 dat$LLM_score=out$quality_score
+dat$LLM_confidence = out$confidence_rating
 
 cor(dat$score, out$quality_score)
-
-
-save(dat, file="generated data/MOREdata-with-LLM-predictions-v2.RData")
+cor(dat$LLM_score, dat$LLM_confidence)
 
 
 
+save(dat, file="generated data/MOREdata-with-LLM-predictions-v3.RData")
+
+
+library(ggplot2)
+dat=dat%>% 
+    rename(Yobs=score, Yhat=LLM_score, ehat=LLM_confidence) %>%
+    mutate( word_count = str_count(text, "\\S+"),
+            char_count = nchar(text),
+            sent_count = str_count(text, "[.!?]+"),
+            resid=Yobs-Yhat, log_wc=log(word_count))
+
+scatter_with_r2 <- function(data, xvar, yvar) {
+    x <- data[[xvar]]
+    y <- data[[yvar]]
+    
+    fit <- lm(y ~ x)
+    r2  <- summary(fit)$r.squared
+    
+    ggplot(data, aes(x = x, y = y,col=as.factor(Yobs))) +
+        geom_point(alpha = 0.6) +
+        geom_smooth(method = "lm", se = FALSE, color = "blue") +
+        annotate("text",
+                 x = Inf, y = Inf,
+                 label = paste0("R² = ", round(r2, 3)),
+                 hjust = 1.1, vjust = 1.5, size = 5) +
+        labs(x=xvar, y=yvar,col="Human score")+
+        theme_minimal()
+}
+
+scatter_with_r2(dat, "Yhat", "Yobs")
+scatter_with_r2(dat, "ehat", "Yobs")
+scatter_with_r2(dat, "Yhat", "ehat")
+scatter_with_r2(dat, "word_count", "ehat")
+scatter_with_r2(dat, "word_count", "Yhat")
+
+
+if (FALSE){
 library(reticulate)
 
 # Install Python tiktoken if not present
@@ -93,5 +140,5 @@ estimate <- estimate_tokens_cost(prompt, model = "gpt-4o-mini")
 cat("Prompt tokens:", estimate$tokens, "\n")
 cat("Estimated cost (USD):", estimate$cost, "\n")
 
-
+}
 

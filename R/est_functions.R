@@ -1,3 +1,39 @@
+#' Compute oracle estimate (full coding) using shared functions
+#' @return Data frame with oracle estimate and SE
+#' 
+#' @export
+est_oracle <- function(data, Yobs = "Yobs", Z="Z") {
+    data$Yobs = get_col_or_vector(data, Yobs)
+    
+    if ( !is.null(Z) ) {
+        data$Z = get_col_or_vector(data, Z)
+    } else {
+        data$Z = 1
+    }
+    
+    oracle_part <- data %>%
+        group_by(Z) %>%
+        summarise(
+            N_z = n(),
+            Ybar = mean(Yobs),
+            var_Y = var(Yobs),
+            .groups = "drop"
+        )
+    
+    if (!is.null(Z)){ 
+        est <- diff(oracle_part$Ybar)  # Treatment - Control
+    }
+    else{ est=oracle_part$Ybar}
+    
+    se <- sqrt(sum(oracle_part$var_Y / oracle_part$N_z))
+    
+    data.frame(
+        method = "Oracle",
+        est = est,
+        SE = se
+    )
+}
+
 
 #' Simple subset coding estimator
 #'
@@ -45,23 +81,17 @@ est_subset = function( data, Yobs = "Yobs",
   
   
   if (finite_pop) { 
-    warning( "The finite_pop code should be checked for variance calculation." )
-    
+
     # add finite population correction when Z is fixed
-    est.part <- mutate( est.part,
-                        fpc <- (N-n.z)/N )
+    est.part <- est.part %>% mutate( fpc = (N-n.z)/N )
     var.hat = sum( est.part$fpc * est.part$var.y.coded/est.part$n.z)
-    
-    # TODO: Not following why fpc is here.  What are these estimating?
-    var = sum( est.part$fpc * est.part$var.y/est.part$N)
     
   } else {
     var.hat = sum(est.part$var.y.coded/est.part$n.z)
-    
-    # Neyman formula
-    var = sum(est.part$var.y/est.part$N)
-    
+
   } 
+  # Neyman formula for oracle variance
+  var = sum(est.part$var.y/est.part$N)
   
   if (nrow(est.part) == 2) {
     est = diff(est.part$Ybar.coded)

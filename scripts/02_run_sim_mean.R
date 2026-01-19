@@ -122,7 +122,7 @@ analysis_results <- analysis_results %>%
                                     "large", "extreme-contrast")    )
 
 
-source("scripts/figure_utils.R")
+source("scripts/plotting_functions.R")
 
 make_frontier_plot(analysis_results, r2_val = 0.85)
 make_frontier_plot(analysis_results, r2_val=0.4)

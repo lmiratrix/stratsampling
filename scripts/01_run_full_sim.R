@@ -25,6 +25,7 @@ source("scripts/sim_functions.R")
 
 
 one_iter = function(params) {
+  
   dat = generate_population(N=params$N, n_strat=params$n_strat,
                             strata_config=params$strata_config,
                             tau=params$tau,

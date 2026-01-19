@@ -8,3 +8,8 @@ figures/
 generated data/
 raw data/
 results/
+NAMESPACE
+tables/
+.RDataTmp
+.RDataTmp1
+old/

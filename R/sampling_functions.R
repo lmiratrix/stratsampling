@@ -219,14 +219,14 @@ calc_optimal_allocation_oracle <- function( dat, n_code,
   # Iteratively adjust allocations when n.zk > N.zk
   for(z in unique(strat_counts$.Z)) {
     sc_z <- strat_counts %>% filter(.Z == z)
-    
+    n_code_z=n_code / length(unique(strat_counts$.Z))
     
     while (any(sc_z$n.zk > sc_z$N.zk)){
       over_allocated <- sc_z$n.zk >= sc_z$N.zk
       if(!any(over_allocated)) break
       
       sc_z$n.zk[over_allocated] <- sc_z$N.zk[over_allocated]
-      n_remaining <- (n_code/2) - sum(sc_z$n.zk[over_allocated])
+      n_remaining <- n_code_z - sum(sc_z$n.zk[over_allocated])
       
       sc_remaining <- sc_z %>% filter(!over_allocated)
       total_weight <- sum(sc_remaining$weight)

@@ -16,16 +16,16 @@
 #'   
 #' @export
 generate_population <- function(N,
-                                n_strat,
-                                strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
-                                tau = 0,
-                                bias = c( "none", "moderate", "large", "extreme-contrast"),
-                                residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
-                                sd_y = 3,
-                                R2_target = 0.5,
-                                no_tx = FALSE,
-                                seed=NULL,
-                                oracle = TRUE # what does this parameter do?
+                                 n_strat,
+                                 strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
+                                 tau = 0,
+                                 bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                 residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
+                                 sd_y = 3,
+                                 R2_target = 0.5,
+                                 no_tx = FALSE,
+                                 seed=NULL,
+                                 oracle = TRUE # what does this parameter do?
 ) {
     
     strata_config = match.arg(strata_config)
@@ -41,11 +41,6 @@ generate_population <- function(N,
     }
     N1 = sum(Z == 1)
     N0 = sum(Z == 0)
-    
-    # Calibrate baseline residual variance of predictions to achieve
-    # target R^2 between Yobs and Yhat (overall)
-    s2_sigma = R2_target * sd_y^2
-    s2_eps = (1 - R2_target)*sd_y^2
     
     
     # Generate strata (separately within treatment arms)
@@ -68,13 +63,13 @@ generate_population <- function(N,
         stop("n_strat must be at least 3 for extreme-contrast residual variance configuration")
     }
     
-    var_mult_raw = switch(residual_var,  # variance multipliers across strata
-                          "homogeneous" = rep(1, n_strat),
-                          "heterogeneous" = seq(0.25, 4, length=n_strat),
-                          "extreme-contrast"=c(0.1, rep(1, n_strat-2), 10))
+    err_var_raw = switch(residual_var,  # variance multipliers across strata
+                         "homogeneous" = rep(1, n_strat),
+                         "heterogeneous" = seq(0.25, 4, length=n_strat),
+                         "extreme-contrast"=c(0.1, rep(1, n_strat-2), 10))
     
     # Normalize to mean 1 (to preserve the target R^2)
-    var_mult = var_mult_raw / sum(var_mult_raw * wts) 
+    err_var = err_var_raw / sum(err_var_raw * wts) 
     
     
     # Specify bias magnitude (units are relative to outcome standard deviation)
@@ -87,7 +82,8 @@ generate_population <- function(N,
     
     # Weight-centering so overall mean bias = 0 under unbalanced strata
     bias_centered  = bias_raw - sum(bias_raw * wts)
-    b_scaled = bias_centered/max(abs(bias_centered))
+    max_abs_bias  = max(abs(bias_centered))
+    b_scaled = if (max_abs_bias > 0) bias_centered / max_abs_bias else bias_centered
     
     if (bias=="none"){
         b = rep(0, n_strat)
@@ -101,22 +97,32 @@ generate_population <- function(N,
     }
     
     
-    # Outcome generation
-    # Yobs = Y.true + eps
-    # Yhat = Y.true + bias
-    Y.true = rnorm(N, 0, sd=sqrt(s2_sigma)) # latent signal
+    # Calibrate target R2
+    target_err_var = sd_y^2*(1-R2_target)
     
-    # stratum-specific residual variance
-    eps = rnorm(N, 0, sqrt(s2_eps * var_mult[strat]))
+    # Weighted variance of bias and weighted mean of noise variance
+    b_bar_w = sum(wts * b)
+    Var_b_w = sum(wts * (b - b_bar_w)^2)
+    E_sig2_w = sum(wts * err_var)
+    curr_err_var = Var_b_w + E_sig2_w
+    
+    c = if (curr_err_var > 0) sqrt(target_err_var / curr_err_var) else 0
+    
+    b = c * b
+    sigma_eps = c * sqrt(err_var)
     
     # human-coded outcomes
-    Y0 = Y.true + eps
+    Y0 = rnorm(N, 0, sd=sd_y) 
     Y1 = Y0 + tau
     
-    # ML predictions with bias
-    Yhat = Y.true + b[as.integer(strat)]
-    
     Yobs = ifelse(Z==1, Y1, Y0)
+    
+    # stratum-specific residual variance
+    eps = rnorm(N, 0, sd=sigma_eps[as.integer(strat)])
+    
+    # ML predictions with bias
+    Yhat = Yobs + b[as.integer(strat)] + eps
+    
     
     #dat = data.frame(ID=1:N, Y0=Y0, Y1=Y1, Yhat0=Yhat0, Yhat1=Yhat1, strata=strat)
     dat = data.frame( Yobs=Yobs, Yhat=Yhat, Z=Z, strata=strat) %>%
@@ -126,6 +132,7 @@ generate_population <- function(N,
     
     return(dat)
 }
+
 
 
 # Helper function to generate strata within a single treatment arm
