@@ -15,6 +15,7 @@ generate_population(
   sd_y = 3,
   R2_target = 0.5,
   no_tx = FALSE,
+  rescale_v = TRUE,
   seed = NULL,
   oracle = TRUE
 )

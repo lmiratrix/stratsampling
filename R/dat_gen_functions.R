@@ -9,7 +9,8 @@ generate_surrogate_noise <- function( N,
                                       bias = c( "none", "moderate", "large", "extreme-contrast"),
                                       residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
                                       sd_y = 3,
-                                      R2_target = 0.5 ) {
+                                      R2_target = 0.5,
+                                      rescale_v = TRUE ) {
     
     strata_config = match.arg(strata_config)
     bias = match.arg(bias)
@@ -33,7 +34,11 @@ generate_surrogate_noise <- function( N,
                          "extreme-contrast"=c(0.1, rep(1, n_strat-2), 10))
     
     # Normalize to mean 1 (so we can preserve the target R^2)
-    err_var = err_var_raw / sum(err_var_raw * wts) 
+    if ( rescale_v ) {
+        err_var = err_var_raw / sum(err_var_raw * wts) 
+    } else {
+        err_var = err_var_raw
+    }
     
     
     # Specify bias magnitude (units are relative to outcome standard deviation)
@@ -109,6 +114,7 @@ generate_population <- function(N,
                                 sd_y = 3,
                                 R2_target = 0.5,
                                 no_tx = FALSE,
+                                rescale_v = TRUE,
                                 seed=NULL,
                                 oracle = TRUE # what does this parameter do?
 ) {
@@ -147,21 +153,25 @@ generate_population <- function(N,
                                       bias = bias,
                                       residual_var = residual_var,
                                       sd_y = sd_y,
-                                      R2_target = R2_target )
+                                      R2_target = R2_target,
+                                      rescale_v = rescale_v )
+    stopifnot( n_distinct(strat$strata) == n_strat )
     
     # ML predictions with bias
     dat$Yhat[ dat$Z == 0 ] = dat$Yobs[ dat$Z == 0 ] + strat$e
     dat$strata[ dat$Z == 0 ] = strat$strata
     
     if ( N1 > 0 ) {
-        strat1 = generate_surrogate_noise( N = N0,
+        strat1 = generate_surrogate_noise( N = N1,
                                            n_strat = n_strat,
                                            strata_config = strata_config,
                                            bias = bias,
                                            residual_var = residual_var,
                                            sd_y = sd_y,
-                                           R2_target = R2_target )
+                                           R2_target = R2_target,
+                                           rescale_v = rescale_v  )
         
+        stopifnot( n_distinct(strat1$strata) == n_strat )
         # ML predictions with bias
         dat$Yhat[ dat$Z == 1 ] = dat$Yobs[ dat$Z == 1 ] + strat1$e
         dat$strata[ dat$Z == 1 ] = strat1$strata
@@ -210,22 +220,24 @@ describe_population <- function(n_strat,
                                 sd_y = 3,
                                 R2_target = 0.5,
                                 no_tx = FALSE,
+                                rescale_v = TRUE,
                                 seed=NULL,
                                 verbose = FALSE ) {
     
     if ( is.data.frame(n_strat) ) {
         dat = n_strat 
     } else {
-    dat = generate_population(N=100000,
-                              n_strat=n_strat,
-                              strata_config=strata_config,
-                              tau=tau,
-                              bias=bias,
-                              residual_var=residual_var,
-                              sd_y=sd_y,
-                              R2_target=R2_target,
-                              no_tx=no_tx,
-                              seed=seed )
+        dat = generate_population(N=100000,
+                                  n_strat=n_strat,
+                                  strata_config=strata_config,
+                                  tau=tau,
+                                  bias=bias,
+                                  residual_var=residual_var,
+                                  sd_y=sd_y,
+                                  R2_target=R2_target,
+                                  no_tx=no_tx,
+                                  rescale_v = rescale_v,
+                                  seed=seed )
     }
     
     sum <- dat %>%
@@ -263,6 +275,10 @@ describe_population <- function(n_strat,
 if ( FALSE ) {
     
     library( tidyverse )
+    library(stratsampling)
+    
+    
+    # Generate data
     dd <- generate_population(N=1000,
                               n_strat=4,
                               strata_config="unbalanced",
@@ -276,18 +292,34 @@ if ( FALSE ) {
     table( dd$strata, dd$Z )
     
     
+    # Illustrate describe_population
+    
+    describe_population(4, 
+                        bias = "extreme-contrast",
+                        residual_var = "extreme-contrast",
+                        rescale_v = TRUE )
+    describe_population(4, 
+                        bias = "extreme-contrast",
+                        residual_var = "extreme-contrast",
+                        rescale_v = FALSE )
+    
+    
     # Call describe_population on all the values for the arguments
     
     grid <- expand_grid(
         n_strat = 4,
-        #strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
-        strata_config = "balanced-exact",
+        strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
+        #strata_config = "balanced-exact",
         tau = c(0),
         bias = c( "none", "moderate", "large", "extreme-contrast"),
         residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
         sd_y = c(3),
-        R2_target = c(0.8)
+        R2_target = c(0.8),
+        rescale_v = TRUE
     )
+    
+    
+  
     
     results <- grid %>%
         rowwise() %>%
@@ -299,6 +331,7 @@ if ( FALSE ) {
                                                   sd_y = sd_y,
                                                   R2_target = R2_target,
                                                   no_tx = FALSE,
+                                                  rescale_v = rescale_v,
                                                   seed=1234,
                                                   verbose = FALSE ) ) ) %>%
         unnest( desc )
@@ -309,5 +342,13 @@ if ( FALSE ) {
     results %>%
         knitr::kable( digits=2 )
     
-    ggplot( results)
+    ggplot( results, aes( bias, prop_bias, color = strata_config, 
+                          lty = rescale_v, group=interaction( strata_config, rescale_v) )) +
+        facet_wrap( ~ residual_var ) +
+        geom_point() + geom_line() +
+        theme_minimal() + 
+        coord_flip() +
+        scale_y_continuous( limits=c(0,1) )
+    
+    
 }

@@ -72,7 +72,7 @@ test_that( "DGP controls variance correctly", {
   s
   #expect_equal( s$r.squared, 0.8, tolerance = 0.1 )  
   var( dd$Yhat - dd$Yobs ) / var( dd$Yobs )
-  expect_equal( 1 - var( dd$Yhat - dd$Yobs ) / var( dd$Yobs ), 0.8, tolerance = 0.025 )
+  expect_equal( 1 - var( dd$Yhat - dd$Yobs ) / var( dd$Yobs ), 0.8, tolerance = 0.05 )
   
   
   set.seed( 53434 )

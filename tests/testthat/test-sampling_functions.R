@@ -32,6 +32,7 @@ test_that("Sample index by strata works", {
                               bias="moderate", 
                               residual_var="heterogeneous",
                               seed=123 )
+  pop$Z = rep( c(0,1), 15 )
   pop$strata = rep( c(1,2,3), c(15,10,5) )
   table( pop$strata )
   expect_true( is.data.frame(pop) )
