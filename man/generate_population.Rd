@@ -10,7 +10,7 @@ generate_population(
   n_strat,
   strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
   tau = 0,
-  bias = c("none", "moderate", "large", "extreme-contrast"),
+  bias = c("none", "small", "moderate", "large", "extreme-contrast"),
   residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
   sd_y = 3,
   R2_target = 0.5,

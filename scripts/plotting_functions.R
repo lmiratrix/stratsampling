@@ -23,6 +23,7 @@ lab_resid <- labeller(residual_var = c(
 ))
 lab_bias <- labeller(bias = c(
     "none" = "Bias: none",
+    "small" = "Bias: small",
     "moderate" = "Bias: moderate",
     "large" = "Bias: large",
     "extreme-contrast" = "Bias: extreme-contrast"
@@ -35,6 +36,7 @@ labs = labeller(residual_var = c(
 ),
 bias = c(
     "none" = "Bias: none",
+    "small" = "Bias: small",
     "moderate" = "Bias: moderate",
     "large" = "Bias: large",
     "extreme-contrast" = "Bias: extreme-contrast"
@@ -219,4 +221,63 @@ make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val=NULL, b
         ggplot2::ggtitle(title)+
         theme_minimal() +
         theme(legend.position = "bottom",panel.grid.minor = element_blank())
+}
+
+
+
+make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+    d <- df %>%
+        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+    
+    if (!is.null(bias_vals)) {
+        d <- d %>% filter(bias %in% bias_vals)
+    }
+    
+    if (!is.null(r2_val)) {
+        d <- d %>% filter(R2_target == r2_val)
+    }
+    
+    ggplot(d, aes(x = coding_frac, y = coverage, color = method)) +
+        geom_hline(yintercept = 0.95, linetype = 2, color = "grey50") +
+        geom_line() + geom_point(size = 1) +
+        facet_grid(facet, labeller = labs) +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2), 
+                           labels = percent_format(accuracy = 1), 
+                           limits = c(0.05, 0.95)) +
+        scale_y_continuous(breaks = seq(0.85, 1.0, by = 0.05), 
+                           labels = percent_format(accuracy = 1),
+                           limits = c(0.85, 1.0)) +
+        xlab("Proportion coded") + ylab("95% CI Coverage Rate") +
+        ggtitle(glue::glue("Coverage rates across simulation scenarios{ifelse(!is.null(r2_val), paste0(' (R² target = ', r2_val, ')'), '')}")) +
+        theme_minimal() +
+        theme(legend.position = "bottom", panel.grid.minor = element_blank())
+}
+
+
+make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+    d <- df %>%
+        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+    
+    if (!is.null(bias_vals)) {
+        d <- d %>% filter(bias %in% bias_vals)
+    }
+    
+    if (!is.null(r2_val)) {
+        d <- d %>% filter(R2_target == r2_val)
+    }
+    
+    ggplot(d, aes(x = coding_frac, y = bias_est, color = method)) +
+        geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
+        geom_line() + geom_point(size = 1) +
+        facet_grid(facet, labeller = labs) +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2), 
+                           labels = percent_format(accuracy = 1), 
+                           limits = c(0.05, 0.95)) +
+        scale_y_continuous(limits = c(-0.1, 0.1)) +
+        xlab("Proportion coded") + ylab("Monte Carlo Bias") +
+        ggtitle(glue::glue("Estimator bias across simulation scenarios{ifelse(!is.null(r2_val), paste0(' (R² target = ', r2_val, ')'), '')}")) +
+        theme_minimal() +
+        theme(legend.position = "bottom", panel.grid.minor = element_blank())
 }

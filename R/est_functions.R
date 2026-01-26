@@ -357,8 +357,31 @@ calc_nominal_var = function( N, p, h, var_Y0, R2_ML, R2_strat ) {
   SE2_full + SE2_samp
 
 }
- 
 
+
+#' Power curve table and plot for stratified vs SRS sampling
+#'
+#' Build the power-curve table (via `make_power_table()`) and/or a
+#' ggplot (via `plot_power_curve()`) comparing stratified sampling to
+#' SRS, given population parameters.
+#'
+#' You can estimate parameters from pilot data with [estimate_R2()].
+#'
+#' @name make_power_table
+#'
+#' @inheritParams calc_nominal_var
+#' @seealso [calc_nominal_var()] for calculating for a single scenario
+#'   and fixed h, and [estimate_R2()] for estimating design
+#'   parameterd.
+#' @param h_min Minimum proportion of documents coded to include in
+#'   the plot/table.
+#' @return `make_power_table()` returns a tibble with columns `h`,
+#' `SE`, and `MDES`.
+#'
+#' `plot_power_curve()` returns a ggplot object with power curves. The
+#' underlying data table is stored as an attribute `"table"`.
+#' @export
+#' 
 make_power_table <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
   
   h_seq = seq( h_min, 1, by = 0.01 )
@@ -371,23 +394,14 @@ make_power_table <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
   
   pow_table = tibble( h = h_seq,
                       SE = SE_seq,
-                      MDES = MDES,
-                      power = pnorm( -1.96 + MDES/SE ) + ( 1 - pnorm( 1.96 + MDES/SE ) ) )
+                      MDES = MDES )
   
   pow_table
 }
 
 
-#' Plot power curve for stratified and SRS sampling
-#' 
-#' Function to plot power curves for stratified sampling
-#' versus SRS sampling given population parameters.
-#' @inheritParams calc_nominal_var
-#' @param h_min Minimum proportion of documents coded to include in the plot.
-#' @return A ggplot object with the power curves.
-#' The underlying data table is stored as an attribute "table".
+#' @rdname make_power_table
 #' @export
-#' 
 plot_power_curve <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
   
   strat_pow = make_power_table( N, p, var_Y0, R2_ML, R2_strat, h_min=h_min )
@@ -422,17 +436,19 @@ plot_power_curve <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
 #'
 #' This is a back of the envelope calculation that does not take
 #' varying proportions of human coded outcomes within strata into
-#' account,
+#' account.
 #'
+#' @seealso [calc_nominal_var()], [plot_power_curve()],
+#'   [make_power_table()]
 #' @inheritParams est_ma_strat
-#' @return The estimated R2 of the stratification (how much machine
-#'   predictions vary across strata) and of the surrogates for the
-#'   outcome.
+#' @return A tibble containing the estimated R2 of the stratification
+#'   (how much machine predictions vary across strata) and of the
+#'   surrogates for the outcome.
 #'
 #' @export
 estimate_R2 <- function(data = NULL,
                                         Yhat = "Yhat", Yobs ="Yobs",
-                                        S = "S", Z = "Z",
+                                        S = NULL, Z = "Z",
                                         strata = "strata" ) { 
   
   if ( is.null( data ) ) {
@@ -442,8 +458,13 @@ estimate_R2 <- function(data = NULL,
   } else {
     data$Yhat = get_col_or_vector(data, Yhat)
     data$Yobs = get_col_or_vector(data, Yobs)
-    data$S    = get_col_or_vector(data, S)
     #data$Z    = get_col_or_vector(data, Z)
+  }
+
+  if ( !is.null(S) ) {
+    data$S    = get_col_or_vector(data, S)
+  } else {
+    data$S = 1
   }
   
   if ( !is.null(Z) ) {

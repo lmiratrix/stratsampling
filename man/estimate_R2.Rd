@@ -8,7 +8,7 @@ estimate_R2(
   data = NULL,
   Yhat = "Yhat",
   Yobs = "Yobs",
-  S = "S",
+  S = NULL,
   Z = "Z",
   strata = "strata"
 )
@@ -26,4 +26,7 @@ power calculation.
 This is a back of the envelope calculation that does not take
 varying proportions of human coded outcomes within strata into
 account,
+}
+\seealso{
+\code{\link[=calc_nominal_var]{calc_nominal_var()}}, \code{\link[=plot_power_curve]{plot_power_curve()}}, \code{\link[=make_power_table]{make_power_table()}}
 }

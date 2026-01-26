@@ -7,7 +7,7 @@ param_grid <- expand.grid(
   n_strat = c(4),
   strata_config="balanced-exact",
   tau=0,
-  bias=c("none","moderate","large","extreme-contrast"),
+  bias=c("none","small", "moderate","large","extreme-contrast"),
   residual_var = c("homogeneous","heterogeneous","extreme-contrast"),
   sd_y=c(3),
   R2_target = c(0.4,0.85),
@@ -63,7 +63,7 @@ library(foreach)
 library(doRNG)
 
 
-cores <- min(parallel::detectCores() - 2, nrow(param_grid))
+cores <- min(parallel::detectCores() - 1, nrow(param_grid))
 cl <- makeCluster(cores)
 registerDoParallel(cl)
 
@@ -111,7 +111,6 @@ system.time(
 saveRDS(results3,file="results/sim_results_unbalanced_strata.rds")
 
 
-stopCluster(cl)
 
 
 # Simulate oracle estimator (i.e., full coding everything) for this data generating process for comparison
@@ -121,7 +120,7 @@ params_oracle = expand.grid(
     n_strat=4,
     strata_config=c("balanced-exact","balanced-approx","unbalanced"),
     tau=0,
-    bias=c("none","moderate","large","extreme-contrast"),
+    bias=c("none","small", "moderate","large","extreme-contrast"),
     residual_var = c("homogeneous","heterogeneous","extreme-contrast"),
     sd_y=3,
     R2_target=unique(param_grid$R2_target),
@@ -168,3 +167,6 @@ results.oracle <- foreach(i=1:nrow(params_oracle), .combine = 'rbind', .packages
     return(res)
 }
 saveRDS(results.oracle,file="results/sim_results_oracle.rds")
+
+stopCluster(cl)
+

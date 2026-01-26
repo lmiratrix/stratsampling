@@ -1,12 +1,9 @@
 # Code to generate fake data for simulation
 
-
-
-
 generate_surrogate_noise <- function( N,
                                       n_strat,
                                       strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
-                                      bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                      bias = c( "none", "small", "moderate", "large", "extreme-contrast"),
                                       residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
                                       sd_y = 3,
                                       R2_target = 0.5,
@@ -44,6 +41,7 @@ generate_surrogate_noise <- function( N,
     # Specify bias magnitude (units are relative to outcome standard deviation)
     bias_raw = switch(bias,
                       "none" = rep(0, n_strat),
+                      "small" = seq(-1, 1, length.out = n_strat),
                       "moderate" = seq(-1, 1, length.out = n_strat),
                       "large" = seq(-1, 1, length.out = n_strat), # up to 100% of outcome SD
                       "extreme-contrast" = c(-1, rep(0, n_strat - 2), 1) # up to 100% of outcome SD focused in only 2 strata
@@ -56,6 +54,8 @@ generate_surrogate_noise <- function( N,
     
     if (bias=="none"){
         b = rep(0, n_strat)
+    } else if (bias=="small"){
+        b = b_scaled * 0.25 * sd_y  # max bias = 25% of outcome SD
     } else if (bias=="moderate"){
         b = b_scaled * 0.5 * sd_y  # max bias = 50% of outcome SD
     }
@@ -109,7 +109,7 @@ generate_population <- function(N,
                                 n_strat,
                                 strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
                                 tau = 0,
-                                bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                bias = c( "none", "small", "moderate", "large", "extreme-contrast"),
                                 residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
                                 sd_y = 3,
                                 R2_target = 0.5,
@@ -215,7 +215,7 @@ generate_strata_within_arm <- function(N_arm, n_strat, strata_config) {
 describe_population <- function(n_strat,
                                 strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
                                 tau = 0,
-                                bias = c( "none", "moderate", "large", "extreme-contrast"),
+                                bias = c( "none", "small", "moderate", "large", "extreme-contrast"),
                                 residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
                                 sd_y = 3,
                                 R2_target = 0.5,
@@ -311,7 +311,7 @@ if ( FALSE ) {
         strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
         #strata_config = "balanced-exact",
         tau = c(0),
-        bias = c( "none", "moderate", "large", "extreme-contrast"),
+        bias = c( "none", "small", "moderate", "large", "extreme-contrast"),
         residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
         sd_y = c(3),
         R2_target = c(0.8),
@@ -337,7 +337,8 @@ if ( FALSE ) {
         unnest( desc )
     
     results <- results %>%
-        dplyr::select( -Z, -n_strat, -tau, - sd_y, -R2_target )
+        dplyr::select( -Z, -n_strat, -tau, - sd_y, -R2_target ) %>% 
+        mutate(bias=fct_relevel( bias, "none"))
     
     results %>%
         knitr::kable( digits=2 )

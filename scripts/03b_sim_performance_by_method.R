@@ -41,7 +41,7 @@ dat_sim <- results %>%
         log_emp_SE = log(emp_SE),
         coding_frac = n_code / N,
         method = factor(method, levels = c("SRS", "Stratified", "Optimal")),
-        bias = factor(bias, levels = c("none", "moderate", "large", "extreme-contrast")),
+        bias = factor(bias, levels = c("none", "small", "moderate", "large", "extreme-contrast")),
         residual_var = factor(residual_var, levels = c("homogeneous", "heterogeneous", "extreme-contrast")),
         R2_target = factor(R2_target),
         strata_config = factor(strata_config, levels = c("balanced-exact", "balanced-approx","unbalanced"))
@@ -361,7 +361,7 @@ ggsave("figures/coefficient_comparison_faceted.pdf", p_comparison_faceted,
 
 
 #' Create detailed coefficient table with CIs
-create_coefficient_table <- function(model_results, top_n = 20) {
+create_coefficient_table <- function(model_results, top_n = 50) {
     
     ref_importance <- calc_variable_importance(model_results$SRS)
     top_terms <- ref_importance %>% 
@@ -375,15 +375,15 @@ create_coefficient_table <- function(model_results, top_n = 20) {
                 method = res$method,
                 ci_lower = estimate - 1.96 * std.error,
                 ci_upper = estimate + 1.96 * std.error,
-                ci_text = sprintf("[%.3f, %.3f]", ci_lower, ci_upper),
-                est_text = sprintf("%.3f", estimate),
-                p_text = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
+                ci = sprintf("[%.3f, %.3f]", ci_lower, ci_upper),
+                est_coefficient = sprintf("%.3f", estimate),
+                p_val = ifelse(p.value < 0.001, "<0.001", sprintf("%.3f", p.value))
             ) %>%
-            select(method, term, est_text, ci_text, p_text)
+            select(method, term, est_coefficient, ci, p_val)
     }) %>%
         pivot_wider(
             names_from = method,
-            values_from = c(est_text, ci_text, p_text),
+            values_from = c(est_coefficient, ci, p_val),
             names_glue = "{method}_{.value}"
         ) %>%
         arrange(term)
@@ -391,7 +391,8 @@ create_coefficient_table <- function(model_results, top_n = 20) {
     return(coef_table)
 }
 
-coef_table <- create_coefficient_table(models, top_n = 20)
+coef_table <- create_coefficient_table(models, top_n = 50)
+
 
 # Export to CSV
 write_csv(coef_table, "results/coefficient_table_with_CI.csv")
