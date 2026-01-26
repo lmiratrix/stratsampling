@@ -87,11 +87,14 @@ est_subset = function( data, Yobs = "Yobs",
     var.hat = sum( est.part$fpc * est.part$var.y.coded/est.part$n.z)
     
   } else {
+    
     var.hat = sum(est.part$var.y.coded/est.part$n.z)
 
   } 
-  # Neyman formula for oracle variance
-  var = sum(est.part$var.y/est.part$N)
+  
+  # If we see all the outcomes we can use the oracle est of the 
+  # variance of y terms.
+  var = sum(est.part$var.y/est.part$n.z)
   
   if (nrow(est.part) == 2) {
     est = diff(est.part$Ybar.coded)
@@ -104,7 +107,7 @@ est_subset = function( data, Yobs = "Yobs",
                        S2.0 = est.part$var.y.coded[[1]],
                        S2.1 = est.part$var.y.coded[[2]])
     
-  } else if (nrow(est.part)==1){
+  } else if (nrow(est.part)==1) {
     est = est.part$Ybar.coded
     
     res <- data.frame( est=est,
@@ -132,6 +135,7 @@ est_subset = function( data, Yobs = "Yobs",
 #' (with fixed and known sampling probabilities).
 #' 
 #' If strata set to null, then do the SRS version.
+#' 
 #' @return A data.frame with columns:
 #' \item{est}{the point estimate}
 #' \item{SE}{Not sure what this is.}
@@ -287,6 +291,10 @@ est_ma_strat = function(data = NULL,
 
 
 
+
+
+
+
 #' Calculate treatment impacts with SRS sample
 #' 
 #' (Baseline) function to calculate tau_hat_ma (the model-assisted
@@ -307,6 +315,183 @@ est_ma_srs = function(data,
 
 
 
+
+# For power calculations ----
+
+
+#' Estimate what the SE would be given a stratification design
+#'
+#' This method calculates the SE given some possible population
+#' summary statistics for the proportional stratified estimator. This
+#' method is used for making power calculations when planning to
+#' subsample documents.
+#'
+#' @param N The total population size
+#' @param p The proportion of units assigned to treatment
+#' @param h The proportion of units that will be human coded (i.e.,
+#'   the sampling fraction)
+#' @param var_Y0 The variance of the outcome in the control group
+#' @param R2_ML The pseudo R-squared of the model's surrogate outcomes
+#'   for predicting actual outcomes.
+#' @param R2_strat The proportion of the residual variance explained by the
+#'  stratification variable.
+#'
+#' @return The estimated variance of the model-assisted proportional
+#'   stratified estimator.
+#'
+#' @export
+calc_nominal_var = function( N, p, h, var_Y0, R2_ML, R2_strat ) {
+  
+  N1 = N * p
+  N0 = N * (1-p)
+  
+  n1 = N1 * h
+  n0 = N0 * h
+  
+  var_e = (1-R2_ML) * (1-R2_strat) * var_Y0
+  
+  SE2_full = (var_Y0 / N1) + (var_Y0 / N0)
+  
+  SE2_samp = ( (1/N1^2)*( N1*(N1-n1)/n1 ) + (1/N0^2)*( N0*(N0-n0)/n0 ) ) * var_e
+  
+  SE2_full + SE2_samp
+
+}
+ 
+
+make_power_table <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
+  
+  h_seq = seq( h_min, 1, by = 0.01 )
+  
+  SE_seq = sapply( h_seq, function(h) {
+    sqrt( calc_nominal_var( N, p, h, var_Y0, R2_ML, R2_strat ) )
+  } )
+  
+  MDES = 2.8*SE_seq
+  
+  pow_table = tibble( h = h_seq,
+                      SE = SE_seq,
+                      MDES = MDES,
+                      power = pnorm( -1.96 + MDES/SE ) + ( 1 - pnorm( 1.96 + MDES/SE ) ) )
+  
+  pow_table
+}
+
+
+#' Plot power curve for stratified and SRS sampling
+#' 
+#' Function to plot power curves for stratified sampling
+#' versus SRS sampling given population parameters.
+#' @inheritParams calc_nominal_var
+#' @param h_min Minimum proportion of documents coded to include in the plot.
+#' @return A ggplot object with the power curves.
+#' The underlying data table is stored as an attribute "table".
+#' @export
+#' 
+plot_power_curve <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
+  
+  strat_pow = make_power_table( N, p, var_Y0, R2_ML, R2_strat, h_min=h_min )
+  srs_pow = make_power_table( N, p, var_Y0, R2_ML=R2_ML, R2_strat=0, h_min = h_min )
+  
+  pow_table = bind_rows( strat = strat_pow,
+                    srs = srs_pow,
+                    .id = "design" )
+  
+  full_MDES = min( pow_table$MDES )
+    
+  plt <- ggplot( pow_table, aes( h, MDES, color=design ) ) +
+    geom_line() +
+    labs( x = "Proportion of documents coded (h)",
+          y = "MDES" ) +
+    geom_hline( yintercept = full_MDES, lty = 2 ) +
+    # expand y-axis to include 0
+    expand_limits( y = 0 ) +
+    theme_minimal()
+  
+  attr( plt, "table" ) <- pow_table
+  
+  plt
+}
+
+
+
+#' Given data, estimate the R2 of the stratification and ML
+#'
+#' This can be used on pilot data to get a rough sense of values for a
+#' power calculation.
+#'
+#' This is a back of the envelope calculation that does not take
+#' varying proportions of human coded outcomes within strata into
+#' account,
+#'
+#' @inheritParams est_ma_strat
+#' @return The estimated R2 of the stratification (how much machine
+#'   predictions vary across strata) and of the surrogates for the
+#'   outcome.
+#'
+#' @export
+estimate_R2 <- function(data = NULL,
+                                        Yhat = "Yhat", Yobs ="Yobs",
+                                        S = "S", Z = "Z",
+                                        strata = "strata" ) { 
+  
+  if ( is.null( data ) ) {
+    data = data.frame( Yhat = Yhat,
+                       Yobs = Yobs,
+                       S = S )
+  } else {
+    data$Yhat = get_col_or_vector(data, Yhat)
+    data$Yobs = get_col_or_vector(data, Yobs)
+    data$S    = get_col_or_vector(data, S)
+    #data$Z    = get_col_or_vector(data, Z)
+  }
+  
+  if ( !is.null(Z) ) {
+    data$Z = get_col_or_vector(data, Z)
+  } else {
+    data$Z = 1
+  }
+  
+  if ( !is.null( strata ) ) {
+    data$strata = get_col_or_vector(data, strata)
+  } else {
+    data$strata = "one"
+  }
+  
+  var_e_full <- var( data$Yobs - data$Yhat, na.rm=TRUE )
+  
+  stats <- data %>%
+    group_by( strata, Z ) %>%
+    summarise( var_e = var( Yobs - Yhat, na.rm=TRUE ),
+               var_Y = var( Yobs, na.rm=TRUE ),
+               n = n(),
+               .groups="drop" )
+  
+  R2s <- stats %>%
+    summarise( R2_strat = 1 - weighted.mean( var_e, n ) / var_e_full,
+               n = sum( n ),
+               K = n() )
+  
+  R2s$R2_ML = 1 - var_e_full / var( data$Yobs, na.rm=TRUE )
+  
+  R2s
+  
+}
+
+
+
+
+if ( FALSE ) {
+  plot_power_curve( 1000, p=0.5, var_Y0=1, R2_ML=0.7, R2_strat=0.2 )
+  
+  plot_power_curve( 1000, p=0.5, var_Y0=1, R2_ML=0.7, R2_strat=0.5 )
+  plot_power_curve( 1000, p=0.5, var_Y0=1, R2_ML=0.7, R2_strat=0 )
+  
+}
+
+
+
+
 # Old code ----
 
 
@@ -314,8 +499,10 @@ est_ma_srs = function(data,
 #' treatment effect estimator) assuming we have human-coded scores,
 #' Yobs, for a subsample of n<N documents plus predicted scores for all
 #' N documents, with the subsample chosen using SRS
+#' 
+#' This function was replaced.
 #'
-#' @export
+#' @noRd
 est_ma_srs_old = function(data,
                           Yhat = "Yhat", Yobs = "Yobs",
                           S = "S", Z = "Z",
