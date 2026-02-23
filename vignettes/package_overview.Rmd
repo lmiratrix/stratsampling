@@ -1,0 +1,256 @@
+---
+title: "Overview of the `stratsampling` package"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{package_overview}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.width = 5,
+                      fig.height = 3,
+                      out.width = "75%",
+                      collapse = TRUE,
+                      comment = "#>",
+                      message = FALSE,
+                      fig.align = "center")
+options(list(dplyr.summarise.inform = FALSE))
+theme_set( theme_classic() )
+library(stratsampling)
+
+```
+
+# Introduction
+
+In this vignette, we provide an overview of the `stratsampling` package, which uses stratified sampling methods to select which of a selected subset of a population should be hand coded.
+One those selected elements are coded, this package also provides estimators that debias estimates by combining an estimate based on a surrogate outcome with a bias adjustment from the hand-coded outcomes.
+
+To use this package, first load it after installing it from github (you may need to install `devtools` from CRAN to make the following code run, and you only need to run the install line once as it will install it permanently on your computer):
+
+```{r setup, eval=FALSE}
+devtools::github_install("https://github.com/lmiratrix/stratsampling")
+library(stratsampling)
+```
+
+Now, to illustrate the package, say you have a dataset of an RCT where you have a machine-coded outcome that is a proxy for some outcome that would be expensive to obtain.
+For example, you might have data that look like this:
+
+```{r}
+data( toy_data )
+toy_data
+```
+
+In this toy dataset, we have three baseline variables and our surrogate `Yhat`.  We also have treatment assignent `Tx` and a unique ID for each observation `ID`.
+
+
+# Create candidate stratifications
+
+Given the data, the first step is to decide how to stratify.
+Given a set of variables, the `create_stratification_candidates()` function creates a large number of candidate stratifications based on different combinations of the variables and different numbers of strata.
+It evaluates them based on proxies for bias and variance within strata:
+
+```{r}
+candidates <- create_stratification_candidates( toy_data, 
+                                                vars = c("Yhat", "X1", "X2", "X3"),
+                                                Z = "Tx" )
+length( candidates )
+
+# Evaluate all candidates
+comparison_precoding <- compare_stratifications_precoding( toy_data, 
+                                                           candidates,
+                                                           Z = "Tx" ) 
+head( comparison_precoding )
+```
+
+The results are sorted by promise, with the best choice at top.
+We might select `Yhat_quintiles` as our choice, but given subject matter expertise we might also choose a different one that we believe is worth focusing on.
+For example, in this case, we know that `X3` is a strong predictor of how well we are able to predict the outcome, so we might include it.
+We could directly use `Yhat_X3_3x3` as our choice, or we could use the `make_interaction_strata()` function to make a custom stratification that is based on the interaction of `Yhat` and `X3`.
+Based on this, we decide to make a 3 x 3 stratification of `Yhat` and `X3`:
+
+```{r}
+toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat, n1 = 3, "Yhat",
+                                            x2 = toy_data$X3, n2 = 3, "X3",
+                                            z_vec = toy_data$Tx)
+
+alt_strat <- candidates[[ 'Yhat_X3_3x3' ]]
+
+# See, same thing:
+all.equal( toy_data$strata, alt_strat )
+```
+
+We can then take a stratified sample from our full dataset to identify the documents for hand coding:
+
+```{r}
+toy_data$sample = generate_sample_index( toy_data, 100,
+                                         Z = "Tx", strata = "strata",
+                                         seed = 4044 )
+
+table( toy_data$strata, toy_data$sample )
+```
+Note our 9 strata with around 10% of the documents being coded in each stratum.
+The code will attempt to sample proportional to strata size, unless told otherwise.
+
+Sample taken, the next step is to go and code the identified documents.
+Here is a code snippit to makes a coding sheet:
+```{r, eval=FALSE}
+sheet <- toy_data %>%
+  filter( sample == 1 ) %>%
+  dplyr::select( ID ) %>%
+  mutate( Yobs = NA ) %>%
+  arrange( ID )
+write_csv( sheet, "coding_sheet.csv" )
+```
+
+After making the sheet, go and code the identified documents using whatever robust human-coding process is deemed appropriate.
+Here is a (fake) finished coded file for demonstration purposes:
+
+```{r}
+data( "toy_data_coded" )
+toy_data_coded
+```
+
+Once the coded data are in hand, merge the original dataset with the coded subset:
+
+```{r}
+
+full_data <- toy_data %>%
+    left_join( toy_data_coded, by = "ID" ) 
+full_data
+
+# Make sure we coded all the targeted documents
+table( full_data$sample, !is.na( full_data$Yobs ) )
+```
+
+We can look at some summary statistics to get a sense of whether the strata are different:
+
+```{r}
+sum_stat <- full_data %>%
+  group_by( strata ) %>%
+  summarise( n = n(),
+             n_code = sum(sample),
+             mean_Yhat = mean( Yhat ),
+             mean_Y = mean( Yobs, na.rm=TRUE ),
+             bias = mean_Yhat - mean_Y,
+             err = sd( Yobs - Yhat, na.rm=TRUE ) ) %>%
+  arrange( -mean_Yhat )
+sum_stat
+```
+
+We can even plot to see trends:
+```{r}
+sum_stat <- sum_stat %>%
+  separate( strata, into = c("Yhat_strat", "X3_strat"), sep = " / " ) %>%
+  mutate( Yhat_strat = factor( Yhat_strat,
+                               levels = c( "Low Yhat", "Med Yhat", "High Yhat" ) ) )
+sum_stat <- sum_stat %>%
+  pivot_longer( cols=c(bias, err),
+                names_to = "stat", values_to = "val" )
+
+ggplot( sum_stat, aes( Yhat_strat, val, 
+                       col=X3_strat, group=X3_strat ) ) +
+  facet_wrap( ~ stat ) +
+  geom_point() +
+  geom_line( ) +
+  geom_hline( yintercept = 0 ) +
+  theme_minimal()
+```
+
+We estimate the treatment effect using the `estimate_treatment_effect()` function, which implements the bias-correction estimator described in our paper.
+
+```{r}
+es = est_ma_strat( data = full_data,
+                   Yobs = "Yobs",
+                   Z = "Tx",
+                   S = "sample",
+                   strata = "strata",
+                   Yhat = "Yhat" )
+es
+```
+
+Our primary numbers are `est` for our estimated ATE and `SEhat` for the associated standard error.
+
+
+# Power calculations
+
+We can also make power curves. To do so we would need design parameters, e.g. from pilot data:
+
+```{r}
+# Using pilot data
+R2s = estimate_R2( full_data, Yobs = "Yobs", Yhat = "Yhat", 
+                   Z = "Tx", strata = "strata" )
+R2s
+```
+
+Once we have them, we can do some calculations via `plot_power_curve()`, which also gives a table of the minimum detectable effect size (MDES) for stratified vs. simple random sample:
+
+```{r, messages=FALSE}
+target_MDES = 0.25
+pp <- plot_power_curve( nrow(full_data), mean(full_data$Tx), 1,
+                        R2_ML = R2s$R2_ML, R2_strat=R2s$R2_strat ) 
+
+tbl <- attr( pp, "table" )
+tbl
+
+# Locate where curves cross target MDES
+crosses = tbl %>%
+  group_by( Method ) %>%
+  filter( abs(MDES-target_MDES) == min(abs(MDES-target_MDES)))
+crosses
+
+# Compare the gain from stratifiaction
+crosses$h[[1]] / crosses$h[[2]]
+
+# Plot the curve
+pp <- pp +
+  geom_hline( yintercept = target_MDES, lty=3 ) +
+  geom_vline( xintercept = crosses$h ) +
+  scale_y_continuous(breaks=seq(0,0.3,by=0.05)) + 
+  expand_limits( y = 0 ) 
+pp
+```
+
+
+
+
+# Supplement: The simulation support code
+
+We also have code for generating fake data for running simulation studies of these kinds of stratification methods.
+Here is an example of generating a population of potential outcomes, strata, and surrogate outcomes with the `generate_population()` function:
+
+```{r}
+library( stratsampling )
+
+set.seed( 4044 )
+dat = generate_population(N=1000, n_strat=4, 
+                          bias = "large",
+                          strata_config ="unbalanced",
+                          tau = 2, R2_target = 0.8,
+                          residual_var = "heterogeneous" )
+ggplot( dat, aes(x=interaction(strata,Z), y=Yhat, color=Z)) + 
+  geom_boxplot()
+```
+
+
+# Supplement: Optimal stratification
+
+If we have some way to assess variation within strata, we can optimize how many units we should sample within the strata.
+For example, we can see how many we should sample within each stratum to minimize the variance of our estimator using the `optimize_stratified_sample()` function.
+
+Here we do it with the generated strata for our simulated data from above.
+Unfortunately, this uses the full set of real outcomes--to do it in practice you would need a good proxy.
+See the paper for further discussion.
+
+```{r}
+calc_optimal_allocation_oracle( dat, 100,
+                                Z = "Z",
+                                strata = "strata",
+                                Yobs = "Yobs",
+                                Yhat = "Yhat",
+                                return_counts = TRUE)
+```

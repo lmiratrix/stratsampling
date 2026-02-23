@@ -407,19 +407,21 @@ plot_power_curve <- function( N, p, var_Y0, R2_ML, R2_strat, h_min = 0.05 ) {
   strat_pow = make_power_table( N, p, var_Y0, R2_ML, R2_strat, h_min=h_min )
   srs_pow = make_power_table( N, p, var_Y0, R2_ML=R2_ML, R2_strat=0, h_min = h_min )
   
-  pow_table = bind_rows( strat = strat_pow,
-                    srs = srs_pow,
-                    .id = "design" )
+  pow_table = bind_rows( Stratified = strat_pow,
+                    SRS = srs_pow,
+                    .id = "Method" )
   
   full_MDES = min( pow_table$MDES )
     
-  plt <- ggplot( pow_table, aes( h, MDES, color=design ) ) +
-    geom_line() +
+  plt <- ggplot( pow_table, aes( h, MDES, color=Method ) ) +
+    geom_line(lwd=1.1) +
     labs( x = "Proportion of documents coded (h)",
-          y = "MDES" ) +
+          y = "MDES", col="Method") +
     geom_hline( yintercept = full_MDES, lty = 2 ) +
     # expand y-axis to include 0
     expand_limits( y = 0 ) +
+      scale_x_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0.0, 1),
+                         labels = scales::percent_format(accuracy = 1)) +
     theme_minimal()
   
   attr( plt, "table" ) <- pow_table

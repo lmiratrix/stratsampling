@@ -76,7 +76,7 @@ calc_oracle_variance = function(dat, method = c("SRS", "Stratified-Prop", "Strat
 #' @param finite_pop Should finite population correction be applied?
 #' @param seed Random seed for reproducibility
 #' @return Data frame with estimates from all methods plus oracle
-compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, finite_pop=TRUE, seed = NULL) {
+compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, finite_pop=FALSE, seed = NULL) {
     
     if (!is.null(seed)) set.seed(seed)
 
@@ -115,7 +115,7 @@ compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, f
 #' @param seed Base random seed
 #' @return Data frame with estimates from all samples
 compute_multiple_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, 
-                                              n_samples = 10, finite_pop=TRUE, seed=NULL) {
+                                              n_samples = 10, finite_pop=FALSE, seed=NULL) {
     
     if (!is.null(seed)) set.seed(seed)
     

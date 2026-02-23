@@ -118,8 +118,8 @@ source("scripts/plotting_functions.R")
 #    Two slices: R2 = 0.85 and R2 = 0.40; small-multiples by residual variance.
 # -------------------------------
 
-fig1_high <- make_frontier_plot(main, r2_val = 0.85, oracle_ref = F)
-fig1_low  <- make_frontier_plot(main, r2_val = 0.40, oracle_ref=F)
+fig1_high <- make_frontier_plot(main, r2_val = 0.85, oracle_ref = F)+scale_y_continuous(breaks=seq(0.2,0.5,by=0.1),limits=c(0.19,0.51), oob=scales::oob_squish)
+fig1_low  <- make_frontier_plot(main, r2_val = 0.40, oracle_ref=F)+scale_y_continuous(breaks=seq(0.2,0.5,by=0.1),limits=c(0.19,0.51), oob=scales::oob_squish)
 
 ggsave("figures/fig1_frontier_highR2.pdf", fig1_high, width = 8.5, height = 6.5)
 ggsave("figures/fig1_frontier_lowR2.pdf",  fig1_low,  width = 8.5, height = 6.5)

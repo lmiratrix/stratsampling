@@ -251,37 +251,56 @@ ggsave("figures/variable_importance_by_method.pdf", p_combined,
 
 
 #' Coefficient plot showing effect direction with confidence intervals
-plot_coefficients_comparison <- function(importance_df,top_n=NULL) {
+plot_coefficients_comparison <- function(importance_df, top_n = NULL) {
     
     # Get top variables across all methods
     top_vars <- importance_df %>%
         group_by(term_clean) %>%
         summarise(max_importance = max(abs_std_coefficient), .groups = "drop")
     
-    
-    if (!is.null(top_n)){
-        top_vars = top_vars %>% 
-        slice_max(max_importance, n = top_n)
+    if (!is.null(top_n)) {
+        top_vars <- top_vars %>%
+            slice_max(max_importance, n = top_n)
     }
     
-    top_vars = top_vars %>% pull(term_clean)
+    top_vars <- top_vars %>% pull(term_clean)
     
+    # Exponentiate coefficients and CIs to get multiplicative effects
+    # exp(coef) gives the multiplicative factor for SE
+    # e.g., exp(0.1) = 1.105 means 10.5% increase in SE
     plot_data <- importance_df %>%
         filter(term_clean %in% top_vars) %>%
-        mutate(term_clean = fct_reorder(term_clean, abs_std_coefficient, .fun = max))
+        mutate(
+            term_clean = fct_reorder(term_clean, abs_std_coefficient, .fun = max),
+            # Exponentiate to get multiplicative effect
+            mult_effect = exp(std_coefficient),
+            mult_ci_lower = exp(ci_lower),
+            mult_ci_upper = exp(ci_upper)
+        )
     
-    ggplot(plot_data, aes(x = std_coefficient, y = term_clean, color = method)) +
-        geom_vline(xintercept = 0, linetype = "dashed", color = "grey50") +
-        geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
+    # Create custom breaks for log scale (as percent change from 1.0)
+    # Show breaks at meaningful percent changes
+    #breaks <- c(0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0)
+    breaks <- seq(0.25,2.0,by=0.25)# c(0.25, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0)
+    
+    labels <- scales::percent(breaks - 1, accuracy = 1)
+    labels[breaks == 1.0] <- "0%"
+    
+    ggplot(plot_data, aes(x = mult_effect, y = term_clean, color = method)) +
+        geom_vline(xintercept = 1, linetype = "dashed", color = "grey50") +
+        geom_errorbarh(aes(xmin = mult_ci_lower, xmax = mult_ci_upper),
                        height = 0.3, alpha = 0.5, linewidth = 0.8,
                        position = position_dodge(width = 0.5)) +
         geom_point(size = 3, alpha = 0.8,
                    position = position_dodge(width = 0.5)) +
-        scale_color_manual( name = "Method",values=method_pal) +
+        scale_x_continuous(trans = "log",
+                           breaks = breaks,
+                           labels = labels) +
+        scale_color_manual(name = "Method", values = method_pal) +
         labs(
-            title = "Standardized Coefficients by Method",
-            subtitle = "Top predictors of log(empirical SE) across all methods (with 95% CI)",
-            x = "Standardized Coefficient",
+            title = "Effect on Standard Error by Method",
+            subtitle = "Top predictors of empirical SE across all methods (with 95% CI)",
+            x = "% Change in SE (log scale)",
             y = NULL,
             caption = "Negative = Decreases SE (better), Positive = Increases SE (worse)\nError bars show 95% confidence intervals"
         ) +

@@ -181,7 +181,9 @@ gridExtra::grid.arrange(p_length, p_pred, nrow = 2)
 #  gridExtra::grid.arrange(p_length, p_pred, nrow = 2)#,
 # width = 10, height = 8)
 
-##  Create and Evaluate Candidate Stratifications
+# -----------------------------------------------------------------------------
+#  Create Candidate Stratifications ----
+# -----------------------------------------------------------------------------
 library(stratsampling)
 
 # Create candidate stratifications
@@ -189,13 +191,13 @@ candidates <- create_stratification_candidates(dat, vars = c("Yhat", "ehat", "wo
 
 # Evaluate all candidates
 comparison_oracle <- compare_stratifications(dat, candidates, min_var_threshold = 0.01) # comparison using residuals (not feasible in practice)
-comparison_precoding <- compare_stratifications_precoding(dat, candidates) # comparison based on Yhat only (can be done before coding has started)
+comparison_precoding <- compare_stratifications_precoding(dat, candidates,Z="Z") # comparison based on Yhat only (can be done before coding has started)
 
 
 # Select top candidates meeting criteria
 top_candidates <- comparison_oracle$summary %>%
-  filter(imbalance_ratio < 10, min_size > 100, min_var_resid > 0.01) %>%
-  arrange(desc(ratio_var_resid)) %>%
+  filter(avg_size_ratio < 10, min_stratum_size > 100, min_var_resid > 0.01) %>%
+  arrange(desc(mean_spread)) %>%
   head(5)
 
 cat("\n=== Top 5 Candidate Stratifications ===\n")
@@ -204,6 +206,35 @@ print(top_candidates)
 
 cat("Based on pre-coding comparisons (using only predictions Yhat): ")
 head(comparison_precoding,n=5)
+
+# -----------------------------------------------------------------------------
+#  Compare Candidates using Oracle Information ----
+# -----------------------------------------------------------------------------
+
+## Plot pre-coding proxy for stratification benefit vs. oracle
+oracle_vs_precoding <- compare_oracle_vs_precoding(
+    oracle_comparison = comparison_oracle,
+    precoding_comparison = comparison_precoding,
+    top_n = 18
+)
+
+
+# View scatter plot
+print(oracle_vs_precoding$scatter_plot)
+ggsave("figures/READS_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
+
+
+# Remove one candidate with only 1 unit per stratum
+
+candidates = candidates[-c(which(names(candidates)=="Yhat_ehat_3x3"))]
+# Compare variance decomposition oracle vs. precoding
+results <- compare_decomposition_oracle(dat, candidates, n_code = floor(0.3*nrow(dat)),Z="Z")
+results$summary  # View table
+results$plot     # Display visualization
+reads_decomp=plot_decomposition_comparison(results,show_components = F)
+reads_decomp
+ggsave("figures/READS_precoding_strat_variance-reduction.pdf",reads_decomp,  width = 8, height = 6)
+
 
 ## Select Final Stratification
 # Apply best stratification
@@ -259,8 +290,8 @@ source("scripts/sim_functions.R")
 
 
 # Single sample at 30% coding budget
-set.seed(111)
-single_estimates <- compute_single_sample_estimates(dat, coding_fraction = 0.30)
+set.seed(2025)
+single_estimates <- compute_single_sample_estimates(dat, coding_fraction = 0.30, finite_pop=FALSE)
 
 comparison_table <- create_comparison_table(single_estimates)
 print(comparison_table)
@@ -288,7 +319,7 @@ ggsave("figures/READS_emp_single_forest.pdf",forest_plot,  width = 8, height = 6
 # Multiple samples to show variability
 
 multi_estimates <- compute_multiple_sample_estimates(dat, coding_fraction = 0.30, 
-                                                     n_samples = 20, seed = 1234)
+                                                     n_samples = 20, seed = 2025, finite_pop=F)
 multi_summary <- create_multi_sample_summary(multi_estimates)
 print(multi_summary)
 
@@ -315,12 +346,14 @@ sqrt( pp ) * sd( dat$Yobs[dat$Z==0] )
 
 target_MDES = 0.15
 pp <- plot_power_curve( nrow(dat), mean(dat$Z), 1,
-                        R2_ML = R2s$R2_ML, R2_strat=R2s$R2_strat )
+                        R2_ML = R2s$R2_ML, R2_strat=R2s$R2_strat )+
+    scale_y_continuous(breaks=seq(0,0.3,by=0.05))+expand_limits( y = 0 ) 
+
 
 tbl <- attr( pp, "table" )
 tbl
 crosses = tbl %>%
-  group_by( design ) %>%
+  group_by( Method ) %>%
   filter( abs(MDES-target_MDES) == min(abs(MDES-target_MDES)))
 crosses
 crosses$h[[1]] / crosses$h[[2]]

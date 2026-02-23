@@ -115,11 +115,16 @@ generate_sample_index <- function( dat,
 
 
 
+#' Generate observed dataset for simulation
+#' 
+#' @description
+#' 
 #' Given a fully observed population, sample and generate observed
 #' outcomes, given possibly stratification, etc.  This method would be
-#' used for simulation.
-#' @param strata Name of stratification to use.  If null will do
-#'   SRS.
+#' used for simulation, and could not be used in actual empirical work
+#' (as the full set of human codes would not exist)
+#'
+#' @param strata Name of stratification to use.  If null will do SRS.
 #' @param n_code Number to code.  If single number, will roughly split
 #'   across all strata under stratified proportional to the strata
 #'   sizes.  If a vector of length strata, will code that many in each
@@ -148,12 +153,16 @@ generate_observed_sample <- function( dat, n_code,
 
 
 
+#' Oracle optimal allocation calculator
+#' 
+#' @description
 #' This method assumes we have Yobs known for everyone, and thus is an
 #' oracle.  It will look at the actual residuals (Yobs - Yhat) to
 #' determine optimal allocation of samples across strata (and
 #' treatment arms if Z passed) to minimize variance of the
 #' model-assisted estimator.
-#'
+#' 
+#' 
 #' @export
 calc_optimal_allocation_oracle <- function( dat, n_code,
                                             Z = NULL,
