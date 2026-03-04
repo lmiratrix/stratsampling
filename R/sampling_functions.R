@@ -1,32 +1,37 @@
 
 
-#' Given a full population, generate a vector of indicators for who is
-#' sampled.
+#' Generate Stratified or Simple Random Sample Indicators
 #'
-#' @param p_tx Proportion of sample to allocate to treatment arm, if
-#'   treatment arm is defined and n_code doesn't specify exact amounts
-#'   for each strata.  If NULL, then will allocation proportional to
-#'   proportion actually treated in each strata.
-#' @param Z If NULL, sample ignoring treatment.  If not null,
-#'   sample within substrata defined by interacting strata with
-#'   treatment.
-#' @param strata Name of stratification to use.  If null will do
-#'   SRS (i.e., treat all units as a single strata).
-#' @param n_code Number to code.  If single number, will roughly split
-#'   across all strata under stratified proportional to the strata
-#'   sizes.  If a vector of length strata, will code that many in each
-#'   strata (ignoring treatment assignment unless tx col passed). If
-#'   tx col passed, then it is best to make sure the passed strata all
-#'   are all treatment or all control, although it will interact
-#'   strata with treatment indicator, and then order the strata as all
-#'   control strata followed by all treatment strata.  So if there is
-#'   strata 1,2,3, you would get six strata of 1-0,2-0,3-0, and then
-#'   1-1,2-1,3-1. You would then need to pass a vector of length 6 for
-#'   n_code (or a single number for total sample size). For SRS, will
-#'   sample ignoring treatment assignment unless treatment column
-#'   passed, and then either make two strata (a co and tx strata) and
-#'   spread n_code across it, or take a vector of length 2 for n_code
-#'   for control, then treatment.
+#' Given a population data frame, generates a binary vector indicating
+#' which units are selected for human coding. Supports simple random
+#' sampling (SRS), stratified proportional allocation, and custom
+#' per-stratum sample sizes.
+#'
+#' @param dat Data frame containing the population.
+#' @param n_code Sample size specification. If a single number, units
+#'   are allocated proportionally across strata (and treatment arms if
+#'   \code{Z} is specified). If a vector matching the number of
+#'   strata-by-treatment cells, specifies exact counts per cell.
+#' @param Z Character string naming the treatment indicator column, or
+#'   \code{NULL} to ignore treatment assignment. When specified,
+#'   sampling is done within substrata defined by crossing strata with
+#'   treatment. Default is \code{NULL}.
+#' @param strata Character string naming the stratification column, or
+#'   \code{NULL} for SRS (all units in one stratum). Default is
+#'   \code{NULL}.
+#' @param p_tx Numeric between 0 and 1. Proportion of the total
+#'   sample allocated to the treatment arm when \code{Z} is specified
+#'   and \code{n_code} is a single number. If \code{NULL}, uses the
+#'   observed treatment proportion. Default is 0.5.
+#' @param seed Optional integer seed for reproducibility.
+#'
+#' @return An integer vector of length \code{nrow(dat)} with values 0
+#'   (not sampled) or 1 (sampled).
+#'
+#' @seealso \code{\link{generate_observed_sample}} for a wrapper that
+#'   also masks unsampled outcomes,
+#'   \code{\link{calc_sampling_weights}} for computing the implied
+#'   sampling probabilities.
 #'
 #' @export
 generate_sample_index <- function( dat,
@@ -115,22 +120,28 @@ generate_sample_index <- function( dat,
 
 
 
-#' Generate observed dataset for simulation
-#' 
-#' @description
-#' 
-#' Given a fully observed population, sample and generate observed
-#' outcomes, given possibly stratification, etc.  This method would be
-#' used for simulation, and could not be used in actual empirical work
-#' (as the full set of human codes would not exist)
+#' Generate Observed Dataset for Simulation
 #'
-#' @param strata Name of stratification to use.  If null will do SRS.
-#' @param n_code Number to code.  If single number, will roughly split
-#'   across all strata under stratified proportional to the strata
-#'   sizes.  If a vector of length strata, will code that many in each
-#'   strata (ignoring treatment assignment unless by_tx=TRUE).  For
-#'   srs, will sample ignoring treatment assignment unless by_tx =
-#'   TRUE
+#' Wrapper around \code{\link{generate_sample_index}} that draws a
+#' (stratified) sample and sets unsampled outcomes to \code{NA}. This
+#' simulates the real-world scenario where only a subsample of units
+#' receives human coding.
+#'
+#' This function is intended for simulation studies only; it requires
+#' fully observed outcomes for the entire population.
+#'
+#' @inheritParams generate_sample_index
+#' @param by_tx Logical. If \code{TRUE}, sample separately within
+#'   treatment arms. Default is \code{FALSE}.
+#'
+#' @return The input data frame with two additional/modified columns:
+#'   \describe{
+#'     \item{S}{Sampling indicator (1 = coded, 0 = not coded)}
+#'     \item{Yobs}{Observed outcome; set to \code{NA} for unsampled units}
+#'   }
+#'
+#' @seealso \code{\link{generate_sample_index}},
+#'   \code{\link{generate_population}}
 #'
 #' @export
 generate_observed_sample <- function( dat, n_code,
@@ -153,16 +164,40 @@ generate_observed_sample <- function( dat, n_code,
 
 
 
-#' Oracle optimal allocation calculator
-#' 
-#' @description
-#' This method assumes we have Yobs known for everyone, and thus is an
-#' oracle.  It will look at the actual residuals (Yobs - Yhat) to
-#' determine optimal allocation of samples across strata (and
-#' treatment arms if Z passed) to minimize variance of the
-#' model-assisted estimator.
-#' 
-#' 
+#' Oracle Optimal (Neyman) Allocation Calculator
+#'
+#' Computes the optimal sample allocation across strata using Neyman
+#' allocation, which allocates more units to strata with higher
+#' residual variance. This is an oracle method because it requires
+#' knowing the true outcomes (Yobs) for all units in order to compute
+#' the actual residuals.
+#'
+#' @param dat Data frame containing the full population with observed
+#'   outcomes and surrogate predictions.
+#' @param n_code Integer. Total number of units to sample for coding.
+#' @param Z Character string naming the treatment indicator column, or
+#'   \code{NULL} to ignore treatment. Default is \code{NULL}.
+#' @param strata Character string naming the stratification column, or
+#'   \code{NULL} (single stratum). Default is \code{NULL}.
+#' @param Yobs Character string or vector. The observed outcome
+#'   variable. Default is \code{"Yobs"}.
+#' @param Yhat Character string or vector. The surrogate prediction
+#'   variable. Default is \code{"Yhat"}.
+#' @param return_counts Logical. If \code{TRUE}, returns only the
+#'   stratum-level allocation table instead of the full dataset with
+#'   sampling indicators. Default is \code{FALSE}.
+#' @param seed Optional integer seed for reproducibility.
+#'
+#' @return If \code{return_counts = FALSE} (default), returns the
+#'   input data frame augmented with sampling indicator \code{S} and
+#'   sampling probability \code{pi}. If \code{return_counts = TRUE},
+#'   returns a data frame with the optimal allocation counts per
+#'   stratum.
+#'
+#' @seealso \code{\link{generate_sample_index}} for proportional
+#'   allocation, \code{\link{est_ma_strat}} for the stratified
+#'   model-assisted estimator.
+#'
 #' @export
 calc_optimal_allocation_oracle <- function( dat, n_code,
                                             Z = NULL,
@@ -272,14 +307,28 @@ calc_optimal_allocation_oracle <- function( dat, n_code,
 }
 
 
-#' Given a sampling indicator and stratification, calculate the
-#' associated sampling weights.
+#' Calculate Sampling Weights from a Stratified Sample
 #'
-#' @param S Name of column in dat that is the sampling indicator
-#'   (0/1).  Or vector of values.
+#' Given a data frame with a sampling indicator and (optional)
+#' stratification, computes the inclusion probability for each unit as
+#' the proportion sampled within its stratum (and treatment arm, if
+#' specified).
 #'
-#' @return Vector of sampling probabilities (weights) for each unit in
-#'   dat.
+#' @param dat Data frame containing the population.
+#' @param Z Character string naming the treatment indicator column, or
+#'   \code{NULL} to ignore treatment. Default is \code{NULL}.
+#' @param S Character string naming the sampling indicator column
+#'   (values 0/1), or a numeric vector of indicators. Default is
+#'   \code{"S"}.
+#' @param strata Character string naming the stratification column, or
+#'   \code{NULL} for unstratified weights. Default is \code{NULL}.
+#'
+#' @return Numeric vector of sampling probabilities (one per row of
+#'   \code{dat}), where each value equals n_k / N_k for the unit's
+#'   stratum.
+#'
+#' @seealso \code{\link{generate_sample_index}},
+#'   \code{\link{est_ma_strat}}
 #'
 #' @export
 calc_sampling_weights <- function( dat,
@@ -323,23 +372,3 @@ calc_sampling_weights <- function( dat,
 
 
 
-if ( FALSE ) {
-  
-  
-  dta = generate_population(N=1000, n_strat=4, oracle=FALSE )
-  head( dta )
-  hits = dta$strata == 1 & dta$Z == 1
-  dta$Yobs[ hits ] = dta$Yobs[ hits ] + rnorm( sum(hits), sd=10 )
-  
-  calc_optimal_allocation_oracle( dta, n_code = 100, strata="strata", by_tx = TRUE, Z = "Z",
-                                  return_counts = TRUE )
-  
-  dd <- calc_optimal_allocation_oracle( dta, n_code = 100, strata="strata", by_tx = TRUE, Z = "Z",
-                                        return_counts = FALSE )
-  head( dd )
-  table( dd$.strata, dd$S )
-  
-  sdta = generate_observed_sample( dta,
-                                   Z="Z", strata="strata",
-                                   n_code=200 )
-}

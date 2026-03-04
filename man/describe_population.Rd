@@ -2,7 +2,7 @@
 % Please edit documentation in R/dat_gen_functions.R
 \name{describe_population}
 \alias{describe_population}
-\title{Describe the DGP population defined by set parameters}
+\title{Describe the Data-Generating Process Population}
 \usage{
 describe_population(
   n_strat,
@@ -18,6 +18,65 @@ describe_population(
   verbose = FALSE
 )
 }
+\arguments{
+\item{n_strat}{Integer specifying the number of strata, or a data
+frame (output of \code{\link{generate_population}}) to summarize
+directly.}
+
+\item{strata_config}{Character. How to allocate units across
+strata: \code{"balanced-exact"} (equal sizes, requires N
+divisible by n_strat), \code{"balanced-approx"} (approximately
+equal via random assignment), or \code{"unbalanced"} (random
+proportions).}
+
+\item{tau}{Numeric. Constant additive treatment effect. Default is
+0 (no treatment effect).}
+
+\item{bias}{Character. Level of systematic prediction bias across
+strata: \code{"none"}, \code{"small"} (up to 25\% of sd_y),
+\code{"moderate"} (up to 50\%), \code{"large"} (up to 100\%), or
+\code{"extreme-contrast"} (bias concentrated in two strata).}
+
+\item{residual_var}{Character. Pattern of residual variance across
+strata: \code{"homogeneous"} (equal variance),
+\code{"heterogeneous"} (linearly increasing), or
+\code{"extreme-contrast"} (one very high, one very low).}
+
+\item{sd_y}{Numeric. Standard deviation of the outcome variable.
+Default is 3.}
+
+\item{R2_target}{Numeric between 0 and 1. Target R-squared for the
+surrogate predictions. Controls overall prediction quality.
+Default is 0.5.}
+
+\item{no_tx}{Logical. If \code{TRUE}, do not generate treatment
+assignment; all units receive control potential outcomes. Useful
+for single-arm designs. Default is \code{FALSE}.}
+
+\item{rescale_v}{Logical. If \code{TRUE}, rescale residual
+variances to preserve the target R-squared exactly. Default is
+\code{TRUE}.}
+
+\item{seed}{Optional integer seed for reproducibility.}
+
+\item{verbose}{Logical. If \code{TRUE}, prints formatted tables of
+stratum-level and aggregate summaries. Default is \code{FALSE}.}
+}
+\value{
+A one-row tibble with columns: \code{Z} (treatment arm),
+\code{Var_b} (variance of stratum-level biases), \code{E_sig2}
+(expected within-stratum residual variance), \code{prop_bias}
+(proportion of prediction error due to bias), and \code{R2}
+(achieved R-squared of surrogate predictions).
+}
 \description{
-Utility function to explore the different simulation factors
+Utility function to explore how different simulation factors (bias
+pattern, residual variance heterogeneity, R-squared) interact to
+produce the population-level properties of the surrogate
+predictions. Generates a large population (or accepts an existing
+data frame) and summarizes the variance of bias, average residual
+variance, proportion of error due to bias, and achieved R-squared.
+}
+\seealso{
+\code{\link{generate_population}}
 }

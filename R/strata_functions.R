@@ -86,17 +86,13 @@ make_quantile_strata <- function(x, n_groups, var_name = "X") {
 
 
 # Create quantile-based strata separately by treatment arm
+# NOTE: This function is not currently used by any exported functions.
+# The pooled stratification approach (make_quantile_strata) is used
+# instead, since arm-specific cutpoints can produce inconsistent
+# strata labels across treatment groups.
 make_quantile_strata_by_arm <- function(x, z_vec, n_groups, var_name = "X") {
-    
-    # TODO: What is proper behavior of this method?  If we are
-    # collapsing strata, then we could get different strata names for
-    # the different arms.  Is that ok?  Alternatively, right now the
-    # code keeps the same cutpoints at start, so z_vec does not
-    # actually impact which unit is in which strata.  That behavior
-    # seems clean, so I am updating following code to just ignore
-    # z_vec for now.
-    
-    warning( "The make_quantile_strata_by_arm method is not fully developed at this moment" )
+
+    warning( "make_quantile_strata_by_arm is experimental and not currently recommended" )
     
     probs <- seq(0, 1, length.out = n_groups + 1)
     labels <- get_labels(n_groups, var_name)
@@ -312,20 +308,10 @@ create_stratification_candidates <- function(dat, vars, Z = NULL, jitter_vars = 
     single_strats <- list()
     
     for (v in vars) {
-        #if (is.null(z_vec)) {
-        if ( TRUE ) {
-            # TODO: Disabled make by arm since not sure what proper behavior should be.
-            
-            # Pooled stratification
-            single_strats[[paste0(v, "_tertiles")]]  <- make_quantile_strata(var_data[[v]], 3, v)
-            single_strats[[paste0(v, "_quartiles")]] <- make_quantile_strata(var_data[[v]], 4, v)
-            single_strats[[paste0(v, "_quintiles")]] <- make_quantile_strata(var_data[[v]], 5, v)
-        } else {
-            # Stratification by treatment arm
-            single_strats[[paste0(v, "_tertiles")]]  <- make_quantile_strata_by_arm(var_data[[v]], z_vec, 3, v)
-            single_strats[[paste0(v, "_quartiles")]] <- make_quantile_strata_by_arm(var_data[[v]], z_vec, 4, v)
-            single_strats[[paste0(v, "_quintiles")]] <- make_quantile_strata_by_arm(var_data[[v]], z_vec, 5, v)
-        }
+        # Pooled stratification (quantile breaks computed on full sample)
+        single_strats[[paste0(v, "_tertiles")]]  <- make_quantile_strata(var_data[[v]], 3, v)
+        single_strats[[paste0(v, "_quartiles")]] <- make_quantile_strata(var_data[[v]], 4, v)
+        single_strats[[paste0(v, "_quintiles")]] <- make_quantile_strata(var_data[[v]], 5, v)
     }
     
     # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
@@ -435,7 +421,7 @@ evaluate_stratification <- function(data, strata_var, Z = "Z",
     
     data$strata_eval <- data[[strata_var]]
     data <- data %>% filter(!is.na(strata_eval))
-    if (nrow(dat) == 0) return(NULL)
+    if (nrow(data) == 0) return(NULL)
     
     if (!is.null(Z)) {
         data$Z <- data[[Z]]
@@ -533,16 +519,17 @@ evaluate_stratification <- function(data, strata_var, Z = "Z",
 #' summarized in a ranked table.
 #'
 #' @param data Data frame containing a \code{resid} column (residuals = Yobs - Yhat),
-#'   a treatment indicator column named \code{"Z"}, and any columns referenced
-#'   by the candidate stratifications.
+#'   a treatment indicator column, and any columns referenced by the candidate
+#'   stratifications.
 #' @param candidates Named list of candidate stratification vectors. Each element
 #'   should be a vector of the same length as \code{nrow(data)} containing stratum
 #'   assignments. Names are used to identify stratifications in the output.
-#' @param min_var_threshold Numeric. Minimum within-stratum residual variance
-#'   required. Stratifications with any stratum below this threshold are excluded
-#'   from results. Default is \code{0.01}.
+#' @param Z Character string. Name of the treatment indicator column in
+#'   \code{data}. Default is \code{"Z"}.
+#' @param ... Additional arguments passed to \code{\link{evaluate_stratification}}.
 #'
-#' @return A list of performance metrics for each stratification method
+#' @return A data frame of performance metrics for each stratification method,
+#'   sorted by promise.
 #' 
 #' @export
 compare_stratifications <- function(data, candidates, Z="Z", ...) {

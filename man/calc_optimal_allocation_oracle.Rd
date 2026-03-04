@@ -2,7 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{calc_optimal_allocation_oracle}
 \alias{calc_optimal_allocation_oracle}
-\title{Oracle optimal allocation calculator}
+\title{Oracle Optimal (Neyman) Allocation Calculator}
 \usage{
 calc_optimal_allocation_oracle(
   dat,
@@ -15,10 +15,46 @@ calc_optimal_allocation_oracle(
   seed = NULL
 )
 }
+\arguments{
+\item{dat}{Data frame containing the full population with observed
+outcomes and surrogate predictions.}
+
+\item{n_code}{Integer. Total number of units to sample for coding.}
+
+\item{Z}{Character string naming the treatment indicator column, or
+\code{NULL} to ignore treatment. Default is \code{NULL}.}
+
+\item{strata}{Character string naming the stratification column, or
+\code{NULL} (single stratum). Default is \code{NULL}.}
+
+\item{Yobs}{Character string or vector. The observed outcome
+variable. Default is \code{"Yobs"}.}
+
+\item{Yhat}{Character string or vector. The surrogate prediction
+variable. Default is \code{"Yhat"}.}
+
+\item{return_counts}{Logical. If \code{TRUE}, returns only the
+stratum-level allocation table instead of the full dataset with
+sampling indicators. Default is \code{FALSE}.}
+
+\item{seed}{Optional integer seed for reproducibility.}
+}
+\value{
+If \code{return_counts = FALSE} (default), returns the
+input data frame augmented with sampling indicator \code{S} and
+sampling probability \code{pi}. If \code{return_counts = TRUE},
+returns a data frame with the optimal allocation counts per
+stratum.
+}
 \description{
-This method assumes we have Yobs known for everyone, and thus is an
-oracle.  It will look at the actual residuals (Yobs - Yhat) to
-determine optimal allocation of samples across strata (and
-treatment arms if Z passed) to minimize variance of the
+Computes the optimal sample allocation across strata using Neyman
+allocation, which allocates more units to strata with higher
+residual variance. This is an oracle method because it requires
+knowing the true outcomes (Yobs) for all units in order to compute
+the actual residuals.
+}
+\seealso{
+\code{\link{generate_sample_index}} for proportional
+allocation, \code{\link{est_ma_strat}} for the stratified
 model-assisted estimator.
 }

@@ -1,20 +1,44 @@
 Package: stratsampling
-Title: Implementation of the stratified sampling for coding
-Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: This code implements the methods described in the stratified coding paper of Mozer, Pashley and Miratrix. It also has the code to run the simulations for that paper.
+Title: Stratified Sampling for Model-Assisted Treatment Effect Estimation
+Version: 0.1.0
+Authors@R: c(
+    person("Reagan", "Mozer", email = "rmozer@bentley.edu",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0003-1302-0503")),
+    person("Nicole", "Pashley", role = "aut"),
+    person("Luke", "Miratrix", role = "aut")
+    )
+Description: Tools for stratified sampling designs that leverage surrogate
+    scores (e.g., machine learning predictions) to efficiently estimate
+    treatment effects when human coding is expensive. Provides functions for
+    creating and evaluating candidate stratifications, drawing stratified
+    samples, and computing model-assisted estimators that combine surrogate
+    predictions with a bias-corrected adjustment from a coded subsample.
+    Also includes power analysis tools and simulation utilities for
+    comparing sampling designs. Methods are described in Mozer, Pashley,
+    and Miratrix (2026).
 License: MIT + file LICENSE
+URL: https://lmiratrix.github.io/stratsampling/, https://github.com/lmiratrix/stratsampling
+BugReports: https://github.com/lmiratrix/stratsampling/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Depends:
-    R (>= 3.5),
-    tidyverse
-RoxygenNote: 7.3.3
-Suggests: 
+    R (>= 3.5)
+Imports:
+    dplyr,
+    tidyr,
+    ggplot2,
+    tibble,
+    purrr,
+    scales,
+    glue,
+    stats
+Suggests:
     knitr,
     rmarkdown,
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    tidyverse
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 LazyData: true
+RoxygenNote: 7.3.3

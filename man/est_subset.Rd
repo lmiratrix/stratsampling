@@ -2,22 +2,45 @@
 % Please edit documentation in R/est_functions.R
 \name{est_subset}
 \alias{est_subset}
-\title{Simple subset coding estimator}
+\title{Simple Subset Estimator (Baseline)}
 \usage{
 est_subset(data, Yobs = "Yobs", S = "S", Z = "Z", finite_pop = FALSE)
 }
+\arguments{
+\item{data}{Data frame containing at minimum the outcome, sampling
+indicator, and treatment columns.}
+
+\item{Yobs}{Name of the observed outcome column, or a numeric vector.
+Default is \code{"Yobs"}.}
+
+\item{S}{Name of the sampling indicator column (1 = coded, 0 = not
+coded), or a numeric vector. Default is \code{"S"}.}
+
+\item{Z}{Name of the treatment indicator column, or \code{NULL} for
+estimating a population mean. Default is \code{"Z"}.}
+
+\item{finite_pop}{Logical. If \code{TRUE}, applies a finite population
+correction. Default is \code{FALSE}.}
+}
 \value{
-A data.frame with columns:
-\item{est}{the point estimate}
-\item{SE}{The SE of the estimator if everything were coded}
-\item{SEhat}{the estimated standard error of the estimator}
-\item{SEhat.full}{NA (not applicable for this estimator)}
-\item{SEhat.samp}{NA (not applicable for this estimator)}
-\item{S2.0}{the sample variance of the coded outcomes in the control group}
-\item{S2.1}{the sample variance of the coded outcomes in the treatment group}
+A data frame with columns:
+\describe{
+\item{est}{Point estimate of the treatment effect (or mean).}
+\item{SE}{Oracle SE (computed using full population variance).}
+\item{SEhat}{Estimated SE from the coded subsample.}
+\item{SEhat.full}{\code{NA} (not applicable for this estimator).}
+\item{SEhat.samp}{\code{NA} (not applicable for this estimator).}
+\item{S2.0, S2.1}{Sample variance of coded outcomes in control
+and treatment groups, respectively.}
+}
 }
 \description{
-This is the (Baseline) function to calculate tau_hat_subset (the
-simple subset treatment effect estimator) assuming we have
-human-coded scores, Yobs, for a subsample of n<N chosen using SRS
+Computes the naive difference-in-means treatment effect estimator
+using only the human-coded subsample, ignoring surrogate scores
+entirely. This is the baseline estimator that the model-assisted
+estimators aim to improve upon.
+}
+\seealso{
+\code{\link[=est_ma_srs]{est_ma_srs()}} and \code{\link[=est_ma_strat]{est_ma_strat()}} for model-assisted
+alternatives that leverage surrogate scores.
 }

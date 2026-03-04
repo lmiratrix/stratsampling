@@ -2,7 +2,7 @@
 % Please edit documentation in R/est_functions.R
 \name{est_ma_srs}
 \alias{est_ma_srs}
-\title{Calculate treatment impacts with SRS sample}
+\title{Model-Assisted SRS Estimator}
 \usage{
 est_ma_srs(
   data,
@@ -13,9 +13,34 @@ est_ma_srs(
   finite_pop = FALSE
 )
 }
+\arguments{
+\item{data}{Data frame containing outcome, surrogate, sampling
+indicator, treatment, and stratification columns.}
+
+\item{Yhat}{Name of the surrogate score column. Default is \code{"Yhat"}.}
+
+\item{Yobs}{Name of the human-coded outcome column. Default is
+\code{"Yobs"}.}
+
+\item{S}{Name of the sampling indicator column (1 = coded, 0 = not
+coded). Default is \code{"S"}.}
+
+\item{Z}{Name of the treatment indicator column, or \code{NULL} for a
+population mean. Default is \code{"Z"}.}
+
+\item{finite_pop}{Logical. If \code{TRUE}, applies finite population
+corrections and returns only the sampling variance component.
+Default is \code{FALSE}.}
+}
+\value{
+A data frame with the same structure as \code{\link[=est_ma_strat]{est_ma_strat()}}.
+}
 \description{
-(Baseline) function to calculate tau_hat_ma (the model-assisted
-treatment effect estimator) assuming we have human-coded scores,
-Yobs, for a subsample of n<N documents plus predicted scores for all
-N documents, with the subsample chosen using SRS
+Computes the model-assisted treatment effect estimator using a
+simple random subsample (no stratification). This is a convenience
+wrapper around \code{\link[=est_ma_strat]{est_ma_strat()}} with \code{strata = NULL}.
+}
+\seealso{
+\code{\link[=est_ma_strat]{est_ma_strat()}} for the stratified version,
+\code{\link[=est_subset]{est_subset()}} for the baseline estimator.
 }
