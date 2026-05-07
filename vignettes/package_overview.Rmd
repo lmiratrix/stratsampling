@@ -1,5 +1,5 @@
 ---
-title: "Getting Started with stratsampling"
+title: "Getting Started with `stratsampling`"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Getting Started with stratsampling}
@@ -34,7 +34,7 @@ coding is expensive.
 A common situation in text-as-data experiments is that researchers have
 access to a machine-coded surrogate outcome for the full sample but
 can only afford to have human coders score a subset of observations.
-The key question is: which observations should be selected for human
+One key question is which observations should be selected for human
 coding, and how should the final estimate combine the surrogate
 predictions with the coded subsample?
 
@@ -116,7 +116,8 @@ head( comparison_precoding )
 Results are sorted by promise, with the best candidate at the top. You
 might select `Yhat_quintiles` or, based on substantive knowledge that
 `X3` is a strong predictor of surrogate accuracy, choose a 3-by-3
-interaction stratification. The `make_interaction_strata()` function
+interaction stratification.
+The `make_interaction_strata()` function
 creates such stratifications directly:
 
 ```{r}
@@ -169,7 +170,7 @@ full_data <- toy_data %>%
     left_join( toy_data_coded, by = "ID" )
 
 # Verify all targeted documents were coded
-table( full_data$sample, !is.na( full_data$Yobs ) )
+table( sampled=full_data$sample, has_outcome = !is.na( full_data$Yobs ) )
 ```
 
 We can examine how bias and residual error vary across strata:
@@ -187,7 +188,7 @@ sum_stat <- full_data %>%
 sum_stat
 ```
 
-Because we used a 3-by-3 interaction stratification on `Yhat` and `X3`,
+Because we used a 3 by 3 interaction stratification on `Yhat` and `X3`,
 we can visualize how bias and residual error vary across `Yhat` levels,
 broken out by `X3`:
 
