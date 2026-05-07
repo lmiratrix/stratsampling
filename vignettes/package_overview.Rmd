@@ -27,17 +27,24 @@ library(stratsampling)
 
 # Introduction
 
-In this vignette, we provide an overview of the `stratsampling` package, which uses stratified sampling methods to select which of a selected subset of a population should be hand coded.
+Consider the problem of using a surrogate to estimate the average level in a group or the difference in levels between two groups, when the cost of obtaining the actual outcome is high.
+If the surrogate is sysematically off, the estimated level or difference could be off as well.
+Mozer & Miratrix (CITE THIS) present a method for selecting a random sample of the units and coding them with the actual outcome, and using the differences between surrogate and actual for the subsample to bias correct.
+Mozer, Pashley & Miratrix (2026) extends this to allow for stratified sampling in order to increase precision of the final estimate.
+This package provides the code to implement the methods in these works.
+
+In this vignette, we provide an overview of the `stratsampling` package.
+It first implements stratified sampling to select which of a selected subset of a population should be hand coded.
 One those selected elements are coded, this package also provides estimators that debias estimates by combining an estimate based on a surrogate outcome with a bias adjustment from the hand-coded outcomes.
 
-To use this package, first load it after installing it from github (you may need to install `devtools` from CRAN to make the following code run, and you only need to run the install line once as it will install it permanently on your computer):
+To use this package, first load it after installing it from GitHub (you may need to install `devtools` from CRAN to make the following code run, and you only need to run the install line once as it will install it permanently on your computer):
 
 ```{r setup, eval=FALSE}
 devtools::github_install("https://github.com/lmiratrix/stratsampling")
 library(stratsampling)
 ```
 
-Now, to illustrate the package, say you have a dataset of an RCT where you have a machine-coded outcome that is a proxy for some outcome that would be expensive to obtain.
+To illustrate the package, say you have a dataset of an RCT where you have a machine-coded outcome that is a proxy for some outcome that would be expensive to obtain.
 For example, you might have data that look like this:
 
 ```{r}
@@ -45,7 +52,9 @@ data( toy_data )
 toy_data
 ```
 
-In this toy dataset, we have three baseline variables and our surrogate `Yhat`.  We also have treatment assignent `Tx` and a unique ID for each observation `ID`.
+In this toy dataset, we have three baseline variables (`X1`, `X2`, and `X3`) and our surrogate `Yhat`.
+`X3` is known to be highly predictive of the actual outcome.
+We also have treatment assignent `Tx` and a unique ID for each observation `ID`.
 
 
 # Create candidate stratifications
@@ -71,11 +80,16 @@ The results are sorted by promise, with the best choice at top.
 We might select `Yhat_quintiles` as our choice, but given subject matter expertise we might also choose a different one that we believe is worth focusing on.
 For example, in this case, we know that `X3` is a strong predictor of how well we are able to predict the outcome, so we might include it.
 We could directly use `Yhat_X3_3x3` as our choice, or we could use the `make_interaction_strata()` function to make a custom stratification that is based on the interaction of `Yhat` and `X3`.
-Based on this, we decide to make a 3 x 3 stratification of `Yhat` and `X3`:
+
+Here we decide to make a 3 x 3 stratification of `Yhat` and `X3`:
 
 ```{r}
-toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat, n1 = 3, "Yhat",
-                                            x2 = toy_data$X3, n2 = 3, "X3",
+toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat, 
+                                            n1 = 3, 
+                                            var_name1 = "Yhat",
+                                            x2 = toy_data$X3, 
+                                            n2 = 3, 
+                                            var_name2 = "X3",
                                             z_vec = toy_data$Tx)
 
 alt_strat <- candidates[[ 'Yhat_X3_3x3' ]]
@@ -93,7 +107,7 @@ toy_data$sample = generate_sample_index( toy_data, 100,
 
 table( toy_data$strata, toy_data$sample )
 ```
-Note our 9 strata with around 10% of the documents being coded in each stratum.
+Note our 9 strata with around 10% of the documents being coded in each.
 The code will attempt to sample proportional to strata size, unless told otherwise.
 
 Sample taken, the next step is to go and code the identified documents.
