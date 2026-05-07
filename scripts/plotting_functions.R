@@ -14,6 +14,24 @@ method_pal <- c(
     "Full coding" = "black"
 )
 
+method_shapes <- c(
+    "Subset"      = 4,
+    "SRS"         = 16,
+    "Stratified"  = 17,
+    "Optimal"     = 15,
+    "Full coding" = 8
+)
+
+# Line type palette (distinct line types for each method)
+method_linetypes <- c(
+    "Subset"      = "dotted",
+    "SRS"         = "solid",
+    "Stratified"  = "dashed",
+    "Optimal"     = "longdash",
+    "Full coding" = "dotdash"
+)
+
+
 
 # Helper for clean labels
 lab_resid <- labeller(residual_var = c(
@@ -23,6 +41,7 @@ lab_resid <- labeller(residual_var = c(
 ))
 lab_bias <- labeller(bias = c(
     "none" = "Bias: none",
+    "small" = "Bias: small",
     "moderate" = "Bias: moderate",
     "large" = "Bias: large",
     "extreme-contrast" = "Bias: extreme-contrast"
@@ -35,6 +54,7 @@ labs = labeller(residual_var = c(
 ),
 bias = c(
     "none" = "Bias: none",
+    "small" = "Bias: small",
     "moderate" = "Bias: moderate",
     "large" = "Bias: large",
     "extreme-contrast" = "Bias: extreme-contrast"
@@ -47,107 +67,128 @@ R2_target = c("0.4"= "R² target = 0.4",
 # 1) Figure 1 — Efficiency frontiers (Empirical SE)
 #    Two slices: R2 = 0.85 and R2 = 0.40; small-multiples by residual variance.
 # -------------------------------
-make_frontier_plot <- function(df, r2_val=NULL,facet = "bias~residual_var", bias_vals=NULL, oracle_ref=FALSE,smooth=F) {
+make_frontier_plot <- function(df, r2_val = NULL, facet = "bias~residual_var",
+                               bias_vals = NULL, oracle_ref = FALSE, smooth = FALSE) {
     d <- df %>%
         filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
     
-    if (!is.null(bias_vals)){
-        d= d %>% filter(bias %in% bias_vals)
+    if (!is.null(bias_vals)) {
+        d <- d %>% filter(bias %in% bias_vals)
     }
     
-    if (!is.null(r2_val)){
-        d = d %>% filter(R2_target==r2_val)
+    if (!is.null(r2_val)) {
+        d <- d %>% filter(R2_target == r2_val)
     }
     
-    if (oracle_ref){
-        ref = df %>%
-            filter(method=="SRS") %>%
+    if (oracle_ref) {
+        ref <- df %>%
+            filter(method == "SRS") %>%
             group_by(any_bias, any_hetero, bias.var.config, R2_target) %>%
-            summarise(full_coding_se=mean(emp_se_full))
+            summarise(full_coding_se = mean(emp_se_full), .groups = "drop")
     }
-
-    if (smooth==T & oracle_ref==T){
-        out = ggplot(d, aes(x = coding_frac, y = emp_se, color = method)) + geom_point()+
-            geom_smooth(se=F) +  facet_grid(facet, labeller = labs) +
-            geom_hline(data=ref, aes(yintercept=full_coding_se), lty=2,col="grey50")
-
-            
-    }
-    else if (smooth==F & oracle_ref==T){
-        out = ggplot(d, aes(x = coding_frac, y = emp_se, color = method)) +geom_point()+
-            geom_line(lwd=1.05) + geom_point(size = 2) +
+    
+    # Base aesthetic mapping with color, shape, and linetype
+    base_aes <- aes(x = coding_frac, y = emp_se, color = method,
+                    shape = method, linetype = method)
+    
+    if (smooth && oracle_ref) {
+        out <- ggplot(d, base_aes) +
+            geom_point(size = 2) +
+            geom_smooth(se = FALSE) +
             facet_grid(facet, labeller = labs) +
-            geom_hline(data=ref, aes(yintercept=full_coding_se), lty=2,col="grey50")
-    }
-    else if (smooth==T & oracle_ref==F){
-        out = ggplot(d, aes(x = coding_frac, y = emp_se, color = method)) +geom_point()+
-            geom_smooth(se=F) +  facet_grid(facet, labeller = labs)
+            geom_hline(data = ref, aes(yintercept = full_coding_se),
+                       lty = 2, col = "grey50")
+    } else if (!smooth && oracle_ref) {
+        out <- ggplot(d, base_aes) +
+            geom_line(linewidth = 0.9) +
+            geom_point(size = 2.5) +
+            facet_grid(facet, labeller = labs) +
+            geom_hline(data = ref, aes(yintercept = full_coding_se),
+                       lty = 2, col = "grey50")
+    } else if (smooth && !oracle_ref) {
+        out <- ggplot(d, base_aes) +
+            geom_point(size = 2) +
+            geom_smooth(se = FALSE) +
+            facet_grid(facet, labeller = labs)
+    } else {
+        # Default: lines with points (colorblind-friendly)
+        out <- ggplot(d, base_aes) +
+            geom_line(linewidth = 0.9) +
+            geom_point(size = 2.5) +
+            facet_grid(facet, labeller = labs)
     }
     
-    else { 
-        out = ggplot(d, aes(x = coding_frac, y = emp_se, color = method)) +geom_point()+
-            geom_line() + geom_point(size = 1) +
-            facet_grid(facet, labeller = labs) 
-        }
-
-    
-    out = out + 
-        scale_color_manual(name="Method", values = method_pal) +
-        scale_x_continuous(breaks=seq(0,1,by=0.2),limits=c(0.05,0.95),labels = percent_format(accuracy = 1)) +
-        xlab("Proportion coded")+ylab("Empirical Std. Error")+
-        #ggtitle(glue::glue("Efficiency frontiers (R² target = {r2_val})")) +
+    # Apply colorblind-friendly scales (color + shape + linetype)
+    out <- out +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_shape_manual(name = "Method", values = method_shapes) +
+        scale_linetype_manual(name = "Method", values = method_linetypes) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0.05, 0.95),
+                           labels = percent_format(accuracy = 1)) +
+        xlab("Proportion coded") +
+        ylab("Empirical Std. Error") +
         theme_minimal() +
-        theme(legend.position = "bottom", panel.grid.minor=element_blank() )
-    
-
+        theme(legend.position = "bottom", panel.grid.minor = element_blank())
     
     out
-    
 }
-    
 
 
 
-
-make_delta_plot <- function(df, facet = "bias~residual_var", r2_val=NULL, bias_vals=NULL,smooth=F) {
+make_delta_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
+                            bias_vals = NULL, smooth = FALSE) {
     base <- df %>%
-        filter(method %in% c("Stratified","Optimal")) %>%
-        mutate(method=fct_relevel(method, "Stratified","Optimal"))%>%
+        filter(method %in% c("Stratified", "Optimal")) %>%
+        mutate(method = fct_relevel(method, "Stratified", "Optimal")) %>%
         select(all_of(cell_keys), method, pct_var_red_vs_SRS)
     
-    
-    if (!is.null(bias_vals)){
-        base = base %>% filter(bias %in% bias_vals)
+    if (!is.null(bias_vals)) {
+        base <- base %>% filter(bias %in% bias_vals)
     }
     
-    if (!is.null(r2_val)){
-        base = base %>% filter(R2_target==r2_val)
+    if (!is.null(r2_val)) {
+        base <- base %>% filter(R2_target == r2_val)
     }
     
-    if (smooth){
-    g=ggplot(base, aes(x = coding_frac, y = pct_var_red_vs_SRS, color = method)) +
-        facet_grid(facet, labeller = labs)+
-        geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
-        geom_smooth(se=F)
-        
-    }
-    else{
-        g=ggplot(base, aes(x = coding_frac, y = pct_var_red_vs_SRS, color = method)) +
-            facet_grid(facet, labeller = labs)+
+    # Base aesthetic with color, shape, and linetype
+    base_aes <- aes(x = coding_frac, y = pct_var_red_vs_SRS,
+                    color = method, shape = method, linetype = method)
+    
+    if (smooth) {
+        g <- ggplot(base, base_aes) +
+            facet_grid(facet, labeller = labs) +
             geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
-            geom_line(lwd=1.1) + geom_point(size = 2)
+            geom_point(size = 2) +
+            geom_smooth(se = FALSE)
+    } else {
+        g <- ggplot(base, base_aes) +
+            facet_grid(facet, labeller = labs) +
+            geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
+            geom_line(linewidth = 1.0) +
+            geom_point(size = 2.5)
     }
     
-    g = g + scale_color_manual(name="Method", 
-                               values = method_pal, labels=c("Proportional Allocation", "Optimal Allocation")) +
-        scale_x_continuous(breaks=seq(0,1,by=0.2), labels = percent_format(accuracy = 1),limits=c(0.05,0.95)) +
-        scale_y_continuous(breaks=seq(-10,80,by=20), labels = percent_format(scale=1),limits=c(-10,85)) +
-        xlab("Proportion coded")+ ylab("% Reduction in Empirical Variance vs. SRS")+
-        ggtitle(glue::glue("Incremental value of stratified sampling vs SRS (R² target = {r2_val})") ) +
+    # Apply colorblind-friendly scales
+    g <- g +
+        scale_color_manual(name = "Method", values = method_pal,
+                           labels = c("Proportional Allocation", "Optimal Allocation")) +
+        scale_shape_manual(name = "Method", values = method_shapes,
+                           labels = c("Proportional Allocation", "Optimal Allocation")) +
+        scale_linetype_manual(name = "Method", values = method_linetypes,
+                              labels = c("Proportional Allocation", "Optimal Allocation")) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2),
+                           labels = percent_format(accuracy = 1), limits = c(0.05, 0.95)) +
+        scale_y_continuous(breaks = seq(-10, 80, by = 20),
+                           labels = percent_format(scale = 1), limits = c(-10, 85)) +
+        xlab("Proportion coded") +
+        ylab("% Reduction in Empirical Variance vs. SRS") +
+        ggtitle(glue::glue("Incremental value of stratified sampling vs SRS (R-squared target = {r2_val})")) +
         theme_minimal() +
         theme(legend.position = "bottom")
+    
     return(g)
 }
+
 
 
 
@@ -190,33 +231,98 @@ make_heatmap = function(dat, r2_val, fixed_budget) {
 
 
 
-make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val=NULL, bias_vals=NULL) {
+make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
     d <- df %>%
-        filter(method %in% c("Subset","SRS","Stratified","Optimal","Full coding"))
+        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal", "Full coding"))
     
-    title="Variance inflation vs full coding"
+    title <- "Variance inflation vs full coding"
     
-    if (!is.null(r2_val)){
-        d = d %>% filter(R2_target==r2_val)
-        title= paste0(title, glue::glue(" (R² target = {r2_val})"))
-
+    if (!is.null(r2_val)) {
+        d <- d %>% filter(R2_target == r2_val)
+        title <- paste0(title, glue::glue(" (R-squared target = {r2_val})"))
     }
     
-    if (!is.null(bias_vals)){
-        d = d %>% filter(bias %in% bias_vals)
+    if (!is.null(bias_vals)) {
+        d <- d %>% filter(bias %in% bias_vals)
     }
     
-    max.y=max(d$re_vs_fullcoding)
-    y.ul=ifelse(max.y>10, 10, ceiling(max.y))
+    max.y <- max(d$re_vs_fullcoding)
+    y.ul <- ifelse(max.y > 10, 10, ceiling(max.y))
     
-    ggplot(d, aes(x = coding_frac, y = re_vs_fullcoding, color = method)) +
+    # Base aesthetic with color, shape, and linetype
+    ggplot(d, aes(x = coding_frac, y = re_vs_fullcoding,
+                  color = method, shape = method, linetype = method)) +
         geom_hline(yintercept = 1, linetype = 2, color = "grey50") +
-        geom_line(lwd=1.1) + geom_point(size = 2) +
-        facet_grid(facet,  labeller = labs) +
-        scale_color_manual(values = method_pal) +
-        scale_x_continuous(breaks=seq(0,1,by=0.2),limits=c(0.05,0.95),labels = percent_format(accuracy = 1)) +
-        xlab("Proportion coded")+ylab("Variance Ratio")+
-        ggplot2::ggtitle(title)+
+        geom_line(linewidth = 1.0) +
+        geom_point(size = 2.5) +
+        facet_grid(facet, labeller = labs) +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_shape_manual(name = "Method", values = method_shapes) +
+        scale_linetype_manual(name = "Method", values = method_linetypes) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0.05, 0.95),
+                           labels = percent_format(accuracy = 1)) +
+        xlab("Proportion coded") +
+        ylab("Variance Ratio") +
+        ggplot2::ggtitle(title) +
         theme_minimal() +
-        theme(legend.position = "bottom",panel.grid.minor = element_blank())
+        theme(legend.position = "bottom", panel.grid.minor = element_blank())
+}
+
+
+
+make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+    d <- df %>%
+        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+    
+    if (!is.null(bias_vals)) {
+        d <- d %>% filter(bias %in% bias_vals)
+    }
+    
+    if (!is.null(r2_val)) {
+        d <- d %>% filter(R2_target == r2_val)
+    }
+    
+    ggplot(d, aes(x = coding_frac, y = coverage, color = method)) +
+        geom_hline(yintercept = 0.95, linetype = 2, color = "grey50") +
+        geom_line() + geom_point(size = 1) +
+        facet_grid(facet, labeller = labs) +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2), 
+                           labels = percent_format(accuracy = 1), 
+                           limits = c(0.05, 0.95)) +
+        scale_y_continuous(breaks = seq(0.85, 1.0, by = 0.05), 
+                           labels = percent_format(accuracy = 1),
+                           limits = c(0.85, 1.0)) +
+        xlab("Proportion coded") + ylab("95% CI Coverage Rate") +
+        ggtitle(glue::glue("Coverage rates across simulation scenarios{ifelse(!is.null(r2_val), paste0(' (R² target = ', r2_val, ')'), '')}")) +
+        theme_minimal() +
+        theme(legend.position = "bottom", panel.grid.minor = element_blank())
+}
+
+
+make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+    d <- df %>%
+        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+    
+    if (!is.null(bias_vals)) {
+        d <- d %>% filter(bias %in% bias_vals)
+    }
+    
+    if (!is.null(r2_val)) {
+        d <- d %>% filter(R2_target == r2_val)
+    }
+    
+    ggplot(d, aes(x = coding_frac, y = bias_est, color = method)) +
+        geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
+        geom_line() + geom_point(size = 1) +
+        facet_grid(facet, labeller = labs) +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_x_continuous(breaks = seq(0, 1, by = 0.2), 
+                           labels = percent_format(accuracy = 1), 
+                           limits = c(0.05, 0.95)) +
+        scale_y_continuous(limits = c(-0.1, 0.1)) +
+        xlab("Proportion coded") + ylab("Monte Carlo Bias") +
+        ggtitle(glue::glue("Estimator bias across simulation scenarios{ifelse(!is.null(r2_val), paste0(' (R² target = ', r2_val, ')'), '')}")) +
+        theme_minimal() +
+        theme(legend.position = "bottom", panel.grid.minor = element_blank())
 }

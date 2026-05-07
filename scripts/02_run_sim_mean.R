@@ -7,7 +7,7 @@ param_grid <- expand.grid(
     n_strat = c(4),
     strata_config="balanced-exact",
     tau=0,
-    bias=c("none","moderate","large","extreme-contrast"),
+    bias=c("none","small", "moderate","large","extreme-contrast"),
     residual_var = c("homogeneous","heterogeneous","extreme-contrast"),
     sd_y=c(3),
     R2_target = c(0.4,0.85),
@@ -64,7 +64,7 @@ library(foreach)
 library(doRNG)
 
 
-cores <- min(parallel::detectCores() - 2, nrow(param_grid))
+cores <- min(parallel::detectCores() - 1, nrow(param_grid))
 cl <- makeCluster(cores)
 registerDoParallel(cl)
 
@@ -118,7 +118,7 @@ analysis_results <- analysis_results %>%
                                     "Stratified", "Optimal"),
         residual_var  = fct_relevel(factor(residual_var), "homogeneous",
                                     "heterogeneous", "extreme-contrast"),
-        bias          = fct_relevel(factor(bias), "none", "moderate",
+        bias          = fct_relevel(factor(bias), "none", "small", "moderate",
                                     "large", "extreme-contrast")    )
 
 

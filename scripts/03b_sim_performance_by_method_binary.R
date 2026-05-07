@@ -48,7 +48,7 @@ dat_sim_binary <- results %>%
         any_bias = factor(ifelse(bias == "none", 0, 1), 
                           levels = c(0, 1), 
                           labels = c("No Bias", "Bias")),
-        bias2 = factor(ifelse(bias=="extreme-contrast","large",bias),levels=c("none","moderate","large")),
+        bias2 = factor(ifelse(bias=="extreme-contrast","large",bias),levels=c("none","small", "moderate","large")),
         
         # Binary recoding: any_heterogeneity = 1 if residual_var is not "homogeneous"
         any_heterogeneity = factor(ifelse(residual_var == "homogeneous", 0, 1),
@@ -151,6 +151,7 @@ calc_variable_importance_binary <- function(model_fit) {
         mutate(
             term_clean = str_replace_all(term, ":", " × "),
             term_clean = str_replace_all(term_clean, "any_biasBias", "Bias"),
+            term_clean = str_replace_all(term_clean, "bias2small", "Bias (Small)"),
             term_clean = str_replace_all(term_clean, "bias2moderate", "Bias (Moderate)"),
             term_clean = str_replace_all(term_clean, "bias2large", "Bias (Large)"),
             term_clean = str_replace_all(term_clean, "any_heterogeneityHeterogeneous Var.", "Heterogeneous Var."),

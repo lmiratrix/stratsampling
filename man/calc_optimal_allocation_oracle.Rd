@@ -2,11 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{calc_optimal_allocation_oracle}
 \alias{calc_optimal_allocation_oracle}
-\title{This method assumes we have Yobs known for everyone, and thus is an
-oracle.  It will look at the actual residuals (Yobs - Yhat) to
-determine optimal allocation of samples across strata (and
-treatment arms if Z passed) to minimize variance of the
-model-assisted estimator.}
+\title{Oracle optimal allocation calculator}
 \usage{
 calc_optimal_allocation_oracle(
   dat,

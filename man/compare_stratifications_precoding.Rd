@@ -4,14 +4,18 @@
 \alias{compare_stratifications_precoding}
 \title{Compare candidate stratifications using pre-coding metrics}
 \usage{
-compare_stratifications_precoding(data, candidates, Z = NULL)
+compare_stratifications_precoding(data, candidates, Z = NULL, Yhat = "Yhat")
 }
 \arguments{
 \item{data}{Data frame with Yhat and Z columns}
 
 \item{candidates}{Named list of stratification vectors}
 
-\item{Z}{Character string specifying the name of the treatment indicator  or \code{NULL} to ignore treatment groups.}
+\item{Z}{Character string specifying the name of the treatment
+indicator  or \code{NULL} to ignore treatment groups.}
+
+\item{Yhat}{Character string specifying the name of the column
+containing predicted values (Yhat). Default is \code{"Yhat"}.}
 }
 \value{
 Data frame comparing stratifications

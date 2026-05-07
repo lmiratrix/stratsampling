@@ -2,20 +2,98 @@
 % Please edit documentation in R/strata_functions.R
 \name{compute_variance_decomposition}
 \alias{compute_variance_decomposition}
-\title{Compute variance decomposition (BS and WS components from Theorem 3.2)}
+\title{Compute variance decomposition (BS and WS components)}
 \usage{
-compute_variance_decomposition(dat, Z = "Z", strata = NULL)
+compute_variance_decomposition(dat, Z = "Z", strata = NULL, n_code = NULL)
 }
 \arguments{
-\item{dat}{Data frame with Yobs, Yhat}
+\item{dat}{Data frame with Yobs, Yhat columns}
 
-\item{Z}{Treatment indicator (if applicable)}
+\item{Z}{Character string specifying the treatment indicator column
+name, or \code{NULL} to ignore treatment groups. Default is
+\code{"Z"}.}
 
-\item{strata}{Stratification variable}
+\item{strata}{Stratification variable. Can be a vector of stratum
+assignments (same length as \code{nrow(dat)}) or \code{NULL} if
+\code{dat} already contains a column named \code{"strata"}.}
+
+\item{n_code}{Optional. Total number of units to be sampled for
+coding. If provided, the function computes the exact BS and WS
+terms from Theorem 3.2 which depend on the sampling fraction. If
+\code{NULL} (default), computes simplified population-level
+variance decomposition components that serve as proxies.}
 }
 \value{
-Data frame with BS and WS components by treatment arm (if applicable) and overall
+If \code{Z} is specified (treatment/control), returns a
+list with:
+\describe{
+\item{\code{by_arm}}{Data frame with decomposition for each treatment arm.}
+\item{\code{overall}}{Data frame with overall decomposition (summed over arms).}
+}
+If \code{Z} is \code{NULL}, returns a single data frame with the
+decomposition.  See details for the specific components included in each case.
 }
 \description{
-Compute variance decomposition (BS and WS components from Theorem 3.2)
+Computes the between-strata (BS) and within-strata (WS) variance
+components of the residuals. These components are related to the
+variance reduction from stratified sampling as described in Theorem
+3.2 of the manuscript.
+}
+\details{
+The variance reduction from stratified sampling (Theorem
+3.2) is:
+
+\deqn{Var(\hat{\tau}_{SRS}) - Var(\hat{\tau}_{strat}) = BS - WS}
+
+\strong{Simplified (population-level) decomposition} (when
+\code{n_code = NULL}):
+
+This computes the standard ANOVA-style decomposition of residual
+variance:
+\itemize{
+\item \code{BS = sum_k w_k * (mean_resid_k - grand_mean)^2}
+\item \code{WS = sum_k w_k * var_resid_k}
+}
+where \code{w_k = N_zk / N_z} is the stratum weight. This satisfies:
+\deqn{Var(resid) = BS + WS}
+
+These simplified components serve as useful diagnostics:
+\itemize{
+\item Large BS suggests systematic differences in prediction bias across
+strata, which stratification can exploit.
+\item Heterogeneous within-stratum variances (captured by \code{var_ratio})
+suggest potential benefit from optimal allocation.
+}
+
+\strong{Exact Theorem 3.2 decomposition} (when \code{n_code} is
+provided):
+
+The exact formulas incorporate finite population corrections and
+sampling fractions. The BS term from Theorem 3.2 is:
+\deqn{BS = sum_k [ (N_z - n_z)/N_z * N_zk / (n_z(N_z-1)) * (mean_resid_k - grand_mean)^2 ]}
+
+The WS term is more complex and depends on the sampling design.
+Under proportional allocation, WS is approximately zero. Under
+optimal allocation (oversampling high-variance strata), WS can
+become negative, providing additional variance reduction.
+
+The returned decomposition includes:
+\describe{
+\item{\code{BS}}{Between-strata variance component. Measures how much
+stratum mean residuals differ from the grand mean. Larger values indicate
+greater potential benefit from stratification.}
+\item{\code{WS}}{Within-strata variance component. Weighted average of
+within-stratum residual variances. Under proportional allocation, this
+term is typically small and positive.  NOTE: The exact WS term from Theorem 3.2 can be negative under optimal
+allocation (oversampling high-variance strata), but the simplified
+population version computed here is always positive.}
+\item{\code{BS_minus_WS}}{The difference BS - WS, which approximates
+the variance reduction from stratified sampling vs. SRS. Positive values
+indicate stratification reduces variance.}
+}
+}
+\seealso{
+\code{\link{evaluate_stratification}} for computing
+stratification quality metrics,
+\code{\link{plot_strata_residuals}} for visualization.
 }

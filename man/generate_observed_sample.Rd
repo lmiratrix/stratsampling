@@ -2,9 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{generate_observed_sample}
 \alias{generate_observed_sample}
-\title{Given a fully observed population, sample and generate observed
-outcomes, given possibly stratification, etc.  This method would be
-used for simulation.}
+\title{Generate observed dataset for simulation}
 \usage{
 generate_observed_sample(
   dat,
@@ -23,11 +21,11 @@ strata (ignoring treatment assignment unless by_tx=TRUE).  For
 srs, will sample ignoring treatment assignment unless by_tx =
 TRUE}
 
-\item{strata}{Name of stratification to use.  If null will do
-SRS.}
+\item{strata}{Name of stratification to use.  If null will do SRS.}
 }
 \description{
 Given a fully observed population, sample and generate observed
 outcomes, given possibly stratification, etc.  This method would be
-used for simulation.
+used for simulation, and could not be used in actual empirical work
+(as the full set of human codes would not exist)
 }

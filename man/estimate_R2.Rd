@@ -8,15 +8,15 @@ estimate_R2(
   data = NULL,
   Yhat = "Yhat",
   Yobs = "Yobs",
-  S = "S",
+  S = NULL,
   Z = "Z",
   strata = "strata"
 )
 }
 \value{
-The estimated R2 of the stratification (how much machine
-predictions vary across strata) and of the surrogates for the
-outcome.
+A tibble containing the estimated R2 of the stratification
+(how much machine predictions vary across strata) and of the
+surrogates for the outcome.
 }
 \description{
 This can be used on pilot data to get a rough sense of values for a
@@ -25,5 +25,9 @@ power calculation.
 \details{
 This is a back of the envelope calculation that does not take
 varying proportions of human coded outcomes within strata into
-account,
+account.
+}
+\seealso{
+\code{\link[=calc_nominal_var]{calc_nominal_var()}}, \code{\link[=plot_power_curve]{plot_power_curve()}},
+\code{\link[=make_power_table]{make_power_table()}}
 }

@@ -2,16 +2,21 @@
 % Please edit documentation in R/strata_functions.R
 \name{evaluate_stratification_precoding}
 \alias{evaluate_stratification_precoding}
-\title{Evaluate a candidate stratification strategy using pre-coding proxies}
+\title{Evaluate a candidate stratification strategy using pre-coding
+proxies}
 \usage{
-evaluate_stratification_precoding(data, strata = NULL, Z = "Z")
+evaluate_stratification_precoding(data, strata = NULL, Z = "Z", Yhat = "Yhat")
 }
 \arguments{
 \item{data}{Data frame with Yhat column}
 
 \item{strata}{Stratification vector}
 
-\item{Z}{Character string specifying the name of the treatment indicator  or \code{NULL} to ignore treatment groups.}
+\item{Z}{Character string specifying the name of the treatment
+indicator  or \code{NULL} to ignore treatment groups.}
+
+\item{Yhat}{Character string specifying the name of the column
+containing predicted values (Yhat). Default is \code{"Yhat"}.}
 }
 \value{
 Data frame with proxy quality metrics

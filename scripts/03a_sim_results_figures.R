@@ -49,7 +49,7 @@ analysis_results <- analysis_results %>%
         coding_frac   = n_code / N,
         method        = fct_relevel(method, "Subset", "SRS", "Stratified", "Optimal"),
         residual_var  = fct_relevel(factor(residual_var), "homogeneous", "heterogeneous", "extreme-contrast"),
-        bias          = fct_relevel(factor(bias), "none", "moderate", "large", "extreme-contrast") #,
+        bias          = fct_relevel(factor(bias), "none", "small", "moderate", "large", "extreme-contrast") #,
         #strata_config = fct_relevel(factor(strata_config), "balanced-exact", "balanced-approx", "unbalanced")
     )
 
@@ -108,7 +108,7 @@ main <- dat %>%
     filter(N == 1000, n_strat == 4, pop.sd == 3) %>%
     mutate(
         residual_var  = fct_relevel(residual_var, "homogeneous", "heterogeneous", "extreme-contrast"),
-        bias          = fct_relevel(bias, "none", "moderate", "large", "extreme-contrast")
+        bias          = fct_relevel(bias, "none","small", "moderate", "large", "extreme-contrast")
     )
 
 source("scripts/plotting_functions.R")
@@ -118,8 +118,8 @@ source("scripts/plotting_functions.R")
 #    Two slices: R2 = 0.85 and R2 = 0.40; small-multiples by residual variance.
 # -------------------------------
 
-fig1_high <- make_frontier_plot(main, r2_val = 0.85, oracle_ref = F)
-fig1_low  <- make_frontier_plot(main, r2_val = 0.40, oracle_ref=F)
+fig1_high <- make_frontier_plot(main, r2_val = 0.85, oracle_ref = F)+scale_y_continuous(breaks=seq(0.2,0.5,by=0.1),limits=c(0.19,0.51), oob=scales::oob_squish)
+fig1_low  <- make_frontier_plot(main, r2_val = 0.40, oracle_ref=F)+scale_y_continuous(breaks=seq(0.2,0.5,by=0.1),limits=c(0.19,0.51), oob=scales::oob_squish)
 
 ggsave("figures/fig1_frontier_highR2.pdf", fig1_high, width = 8.5, height = 6.5)
 ggsave("figures/fig1_frontier_lowR2.pdf",  fig1_low,  width = 8.5, height = 6.5)
@@ -129,8 +129,8 @@ ggsave("figures/fig1_frontier_lowR2.pdf",  fig1_low,  width = 8.5, height = 6.5)
 #    ∆(% variance reduction vs SRS) across budgets and moderators
 # -------------------------------
 
-fig2_high <- make_delta_plot(main, r2_val = 0.85, bias_vals=c("none","moderate","large"))
-fig2_low  <- make_delta_plot(main, r2_val = 0.40, bias_vals=c("none","moderate","large"))
+fig2_high <- make_delta_plot(main, r2_val = 0.85, bias_vals=c("none","small", "moderate","large"))
+fig2_low  <- make_delta_plot(main, r2_val = 0.40, bias_vals=c("none","small", "moderate","large"))
 
 ggsave("figures/fig2_delta_opt_over_strat_highR2.pdf", fig2_high, width = 7.2, height = 6.0)
 ggsave("figures/fig2_delta_opt_over_strat_lowR2.pdf",  fig2_low,  width = 7.2, height = 6.0)
@@ -175,22 +175,10 @@ fig2b=make_delta_plot(base2, facet=as.formula("R2_target ~ bias+residual_var")) 
 print(fig2b)
 ggsave("figures/fig2b_delta_opt_over_strat.pdf", fig2b, width = 8.5, height = 6.5)
 
-# -------------------------------
-# 3) Figure 3 — Heatmaps at fixed budgets (e.g., 20% and 40%)
-#    (a) % reduction vs SRS for Stratified and Optimal
-#    (b) Incremental gain (Optimal − Stratified)
-# -------------------------------
-
-fig3_high <- make_heatmap(main, r2_val = 0.85, fixed_budget=0.2)
-fig3_low <- make_heatmap(main, r2_val = 0.4, fixed_budget=0.2)
-
-
-ggsave(glue::glue("figures/fig3_heatmap_20pct_highR2.pdf"), fig3_high, width = 8, height = 3.5)
-ggsave(glue::glue("figures/fig3_heatmap_20pct_lowR2.pdf"), fig3_low, width = 8, height = 3.5)
 
 
 # -------------------------------
-# 4) Figure 4 — Variance inflation vs FULL CODING (if present)
+# 4) Figure 3 — Variance inflation vs FULL CODING (if present)
 #     y = 100 * Var(method) / Var(full-coding). 100% = as good as full coding.
 # -------------------------------
 
@@ -254,7 +242,8 @@ print(fig5)
 ggsave("figures/fig5_emp_SE_aggregated.pdf", fig5, width = 8.5, height = 6.5)
 
 fig5b<- make_full_ratio_plot(res,facet=as.formula(R2_target~any_bias+any_hetero))+ theme(panel.grid.minor = element_blank())+
-    scale_y_continuous(breaks=seq(2,10,by=2),limits=c(1,11), oob=scales::oob_squish)+    theme(panel.grid.minor = element_blank(), strip.text = element_text(size = 11),legend.text = element_text(size=10))+
+    scale_y_continuous(breaks=seq(2,10,by=2),limits=c(1,11), oob=scales::oob_squish)+   
+    theme(panel.grid.minor = element_blank(), strip.text = element_text(size = 11),legend.text = element_text(size=10))
 
 print(fig5b)
 

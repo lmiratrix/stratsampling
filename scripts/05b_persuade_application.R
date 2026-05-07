@@ -179,9 +179,15 @@ gridExtra::grid.arrange(p_length, p_pred, p_conf, ncol= 3)
 
 ##  Create and Evaluate Candidate Stratifications
 library(stratsampling)
+dat$Yhat2 = as.numeric(cut(dat$Yhat,breaks=c(0,3,5,6,Inf))) # group rare very low/high scores with closest values
+dat$essay_length = cut(dat$word_count,breaks=c(0,median(dat$word_count),Inf))
+
+
 
 # Create candidate stratifications
-candidates <- create_stratification_candidates(dat,vars = c("Yhat", "ehat", "word_count"), jitter_vars=c("Yhat"), seed=12345)
+candidates <- create_stratification_candidates(dat,vars = c("Yhat2", "ehat", "word_count"), seed=12345)
+candidates$Yhat2_word_count_4x2 = interaction(dat$Yhat2,dat$essay_length)
+
 
 # Evaluate all candidates
 comparison_oracle <- compare_stratifications(dat, candidates, Z=NULL, min_var_threshold = 0.01) # comparison using residuals (not feasible in practice)
@@ -190,8 +196,8 @@ comparison_precoding <- compare_stratifications_precoding(dat, candidates,Z=NULL
 
 # Select top candidates meeting criteria
 top_candidates <- comparison_oracle$summary %>%
-    filter(imbalance_ratio < 10, min_size > 100, min_var_resid > 0.01) %>%
-    arrange(desc(ratio_var_resid)) %>%
+    filter( min_stratum_size > 10, min_var_resid > 0.01) %>%
+    arrange(desc(mean_spread)) %>%
     head(5)
 
 cat("\n=== Top 5 Candidate Stratifications ===\n")
@@ -201,22 +207,42 @@ print(top_candidates)
 cat("Based on pre-coding comparisons (using only predictions Yhat): ")
 head(comparison_precoding,n=5)
 
+
+## Plot pre-coding proxy for stratification benefit vs. oracle
+oracle_vs_precoding <- compare_oracle_vs_precoding(
+    oracle_comparison = comparison_oracle,
+    precoding_comparison = comparison_precoding,
+    top_n = 19
+)
+
+
+# View scatter plot
+print(oracle_vs_precoding$scatter_plot)
+ggsave("figures/persuade_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
+
+
+# Compare variance decomposition oracle vs. precoding
+results <- compare_decomposition_oracle(dat, candidates, n_code = floor(0.3*nrow(dat)),Z=NULL)
+results$summary  # View table
+
+decomp=plot_decomposition_comparison(results,show_components = F)
+decomp
+ggsave("figures/persuade_precoding_strat_variance-reduction.pdf",decomp,  width = 8, height = 6)
+
+
 ## Select Final Stratification
 # Apply best stratification
-strat_name="Yhat_word_count_3x3"
+strat_name="Yhat2_word_count_4x2"
 dat$strata <- candidates[[strat_name]] # choose one that doesn't use residuals (oracle)
 
 plot_strata_residuals(dat, dat$strata)
 compute_variance_decomposition(dat, strata=dat$strata,Z=NULL)
 
-dat = dat %>% 
- mutate(pred_cat = gsub(" Yhat", "", str_split_fixed(strata," / ",n=2)[,1]),
-                     wc_cat= gsub(" word_count", "", str_split_fixed(strata," / ",n=2)[,2])) %>%
-    mutate(pred_cat=factor(pred_cat, labels=c("Low","Med","High"),ordered=T),
-           wc_cat=factor(wc_cat, labels=c("Low","Med","High"),ordered=T)) 
+levels(dat$essay_length) = c("Low", "High")
+dat$Yhat2 = factor(dat$Yhat2,levels=1:4,labels=c("1-2","3","4","5-6"))
 # Document characteristics
 strata_characteristics <- dat %>%
-    group_by( strata, pred_cat, wc_cat) %>%
+    group_by( strata, Yhat2, essay_length) %>%
     summarise(
         N_zk = n(),
         mean_Yobs = mean(Yobs),
@@ -227,7 +253,7 @@ strata_characteristics <- dat %>%
         sd_resid = sd(resid),
         mean_word_count = mean(word_count),
         .groups = "drop"
-    ) %>% arrange(pred_cat,wc_cat)
+    ) %>% arrange(Yhat2,essay_length)
 
 print(strata_characteristics)
 
@@ -236,8 +262,8 @@ print(strata_characteristics)
 strata_table <- strata_characteristics %>%
     mutate(
        k= row_number(),
-        `Pred. Quality`=pred_cat,
-        `Word Count` = wc_cat,
+        `Pred. Quality`=Yhat2,
+        `Word Count` = essay_length,
         N = N_zk,
         `Mean $Y$` = sprintf("%.2f", mean_Yobs),
         `Mean $\\hat{Y}$` = sprintf("%.2f", mean_Yhat),
@@ -263,7 +289,7 @@ source("scripts/application_functions.R")  # From previous code
 source("scripts/sim_functions.R")
 
 # Single sample at 30% coding budget
-single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = F,seed=2025)
+single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=1111)
 
 comparison_table <- create_comparison_table(single_estimates)
 print(comparison_table)
@@ -275,7 +301,7 @@ comparison_table=comparison_table %>% mutate(CI=sprintf("(%.3f, %.3f)", `95% CI 
 kbl(comparison_table,  format = "latex", booktabs = TRUE,  
     caption = "Results from a single iteration with coding budget of h=30\\%. Variance inflation is relative to full human coding (oracle).",
     label="persuade_point_ests",escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
-    write_file("tables/persuade-point-ests-single-iter.tex")
+    write_file("tables/persuade-ests-single-iter.tex")
 
 # Create forest plot
 oracle <- est_oracle(dat,Z=NULL)
