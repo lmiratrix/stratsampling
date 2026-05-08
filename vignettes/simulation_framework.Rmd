@@ -31,23 +31,16 @@ The `stratsampling` package includes a flexible data-generating
 process (DGP) for running Monte Carlo simulations that compare
 stratified and simple random sampling designs. This vignette
 describes how to generate simulated populations, configure the key
-simulation factors, and run repeated-sampling experiments that
+simulation factors, and run Monte Carlo experiments to
 evaluate estimator performance.
-
-The simulation framework is designed around three core questions:
-
-1. How much does stratified sampling improve precision over SRS?
-2. Under what conditions is the improvement largest (or smallest)?
-3. How does optimal (Neyman) allocation compare to proportional
-   allocation?
 
 
 # Generating a simulated population
 
-The `generate_population()` function creates a population of `N`
-units with potential outcomes, treatment assignment, and surrogate
+The `generate_population()` function creates a randomized experiment of $N$
+units with potential outcomes, treatment assignment, the observed outcome, and surrogate
 predictions. The surrogate predictions are constructed by adding
-stratum-specific bias and noise to the true outcomes.
+stratum-specific bias and noise to the true outcomes, mimicing what a LLM would do.
 
 ```{r}
 set.seed( 42 )
@@ -71,26 +64,30 @@ The returned data frame contains:
 - `Yhat`: Surrogate prediction (Yobs + stratum-specific noise).
 - `ID`: Unique unit identifier.
 
-A boxplot of the surrogate predictions by stratum and treatment arm
-gives an immediate visual summary of the generated population. In
-particular, you can see how the distribution of `Yhat` varies across
-strata and whether the treatment shift (the gap between treatment and
-control boxes within each stratum) is consistent:
+A boxplot of the errors by stratum and treatment arm
+gives an immediate visual summary of how the surrogate may be systematically off.
+particular, you can see how the distribution of `Y - Yhat` varies across
+strata for both treatment arms.
 
 ```{r, fig.width = 6, fig.height = 3.5}
-ggplot( dat, aes( x = interaction(strata, Z), y = Yhat, color = factor(Z) ) ) +
+ggplot( dat, aes( x = strata, 
+                  y = Yobs - Yhat, color = factor(Z),
+                  group = interaction(Z,strata) ) ) +
   geom_boxplot() +
   labs( x = "Stratum x Treatment arm", y = "Surrogate prediction (Yhat)",
         color = "Treatment (Z)" ) +
-  theme( axis.text.x = element_text( angle = 45, hjust = 1 ) )
+  theme( axis.text.x = element_text( angle = 45, hjust = 1 ) ) +
+  geom_hline( yintercept = 0 ) +
+  theme_minimal()
 ```
 
+For this particular DGP, we see systematic bias in some of the strata, and  more variation in the size of error across strata.
 
 # Simulation factors
 
 The DGP is controlled by several parameters that govern the structure
-of the surrogate predictions. Understanding these factors is important
-for designing informative simulation studies.
+of the surrogate predictions.
+We walk through some of the core ones in the following.
 
 ## Surrogate accuracy (`R2_target`)
 
@@ -139,7 +136,8 @@ Bias is always mean-centered across strata (weighted by stratum size),
 so the overall surrogate mean equals the overall true mean on average.
 
 ```{r, fig.height = 3}
-bias_scenarios <- c("none", "small", "moderate", "large")
+bias_scenarios <- c("small", "moderate", "large",
+                    "extreme-contrast")
 dat_bias <- map_dfr(bias_scenarios, function(b) {
   d <- generate_population(N = 3000, n_strat = 5, tau = 0,
                            bias = b,
@@ -157,19 +155,20 @@ dat_bias %>%
   geom_col() +
   facet_wrap(~bias_level) +
   labs(title = "Stratum-level bias under different bias settings",
-       x = "Stratum", y = "Mean bias (Yhat - Yobs)") +
+       x = "Stratum", y = "Mean bias (Yhat - Yobs)",
+       caption ="'none' omitted as there is nothing to see") +
   theme(legend.position = "none")
 ```
 
 
 ## Residual variance heterogeneity (`residual_var`)
 
-The `residual_var` parameter controls whether prediction errors are
+The `residual_var` parameter controls whether prediction errors (not including bias) are
 equally variable across strata or concentrated in certain strata:
 
 - `"homogeneous"`: Equal residual variance in all strata.
 - `"heterogeneous"`: Linearly increasing variance across strata.
-- `"extreme-contrast"`: One stratum with very high variance, one with
+- `"extreme-contrast"`: One stratum with very high variance and one with
   very low variance (requires at least 3 strata).
 
 ```{r, fig.height = 3}
@@ -200,15 +199,15 @@ dat_var %>%
 
 The `strata_config` parameter controls stratum sizes:
 
-- `"balanced-exact"`: Equal sizes (requires N divisible by n_strat).
+- `"balanced-exact"`: Equal sizes (requires `N` divisible by `n_strat`).
 - `"balanced-approx"`: Approximately equal via random assignment.
 - `"unbalanced"`: Random proportions drawn from a uniform distribution.
 
 
-## Inspecting the DGP
+# Inspecting the DGP
 
-The `describe_population()` function summarizes how the simulation
-factors interact to produce the population-level properties:
+The `describe_population()` function summarizes a generated dataset.
+It gives two tables, one of strata-level characteristics and one of overall population characteristics.
 
 ```{r}
 describe_population(n_strat = 5,
@@ -218,7 +217,7 @@ describe_population(n_strat = 5,
                     verbose = TRUE)
 ```
 
-This is useful for verifying that the DGP produces the intended
+This method is useful for verifying that the DGP produces the intended
 properties before running a large simulation.
 
 
@@ -236,7 +235,7 @@ a simple simulation comparing four estimators:
    allocation.
 
 ```{r}
-# Fix one population
+# Generate a single population
 pop <- generate_population(N = 2000, n_strat = 5, tau = 0.5,
                            bias = "moderate",
                            residual_var = "heterogeneous",
@@ -252,26 +251,25 @@ one_iter <- function(pop, n_code) {
   samp_srs <- pop %>% group_by(Z) %>% sample_n(n_code / 2)
   pop_sub <- pop %>% mutate(S = ifelse(ID %in% samp_srs$ID, 1, 0))
   out_subset <- est_subset(pop_sub, S = pop_sub$S)
-  out_subset$method <- "Subset"
 
   # --- SRS model-assisted ---
   out_srs <- est_ma_srs(pop_sub, Yhat = pop_sub$Yhat, S = pop_sub$S)
-  out_srs$method <- "SRS"
 
   # --- Proportional stratified ---
   pop$S <- generate_sample_index(pop, n_code, Z = "Z", strata = "strata")
   out_strat <- est_ma_strat(pop, Yhat = "Yhat", S = "S",
                              Z = "Z", strata = "strata")
-  out_strat$method <- "Stratified"
 
   # --- Optimal stratified ---
   pop_opt <- calc_optimal_allocation_oracle(pop, n_code,
                                              strata = "strata", Z = "Z")
   out_opt <- est_ma_strat(pop_opt, Yhat = "Yhat", S = "S",
                            Z = "Z", strata = "strata")
-  out_opt$method <- "Stratified-Opt"
 
-  bind_rows(out_subset, out_srs, out_strat, out_opt)
+  bind_rows( Subset = out_subset, 
+             SRS = out_srs, 
+             Stratified = out_strat, 
+             `Stratified-Opt` = out_opt, .id = "method" )
 }
 ```
 
@@ -286,8 +284,11 @@ results <- map_dfr(1:200, function(i) {
   out$iter <- i
   out
 })
+```
 
-# Summarize
+Then summarize the results:
+
+```{r}
 sim_summary <- results %>%
   group_by(method) %>%
   summarise(
@@ -303,22 +304,11 @@ sim_summary <- results %>%
 sim_summary
 ```
 
-```{r, fig.height=3.5}
-ggplot(results, aes(x = method, y = est, fill = method)) +
-  geom_boxplot(alpha = 0.7) +
-  geom_hline(yintercept = 0.5, linetype = 2, color = "red") +
-  labs(title = "Sampling distribution of ATE estimates (200 iterations)",
-       subtitle = paste0("True tau = 0.5, N = 2000, n_code = ", n_code),
-       x = "Estimator", y = "Estimated ATE") +
-  theme(legend.position = "none")
-```
 
+## A quick multifactor simulation
 
-# Varying simulation factors
-
-To understand how different factors affect estimator performance, you
-can loop over a grid of DGP settings. Here is an example that varies
-`R2_target` and `bias`:
+To understand how different factors affect estimator performance, loop over a grid of DGP settings.
+Here we vary `R2_target` and `bias`:
 
 ```{r, cache = FALSE}
 grid <- expand_grid(
@@ -343,47 +333,33 @@ grid_results <- map_dfr(1:nrow(grid), function(g) {
   })
 })
 
-# Summarize by factor combination
+```
+
+Results in hand, summarize by factor combination
+
+```{r}
 factor_summary <- grid_results %>%
   group_by(R2, bias_level, method) %>%
   summarise(RMSE = sqrt(mean((est - 0.5)^2)),
             .groups = "drop")
 ```
 
+Then simply plot the results:
+
 ```{r, fig.width = 7, fig.height = 4}
 factor_summary %>%
   mutate(bias_level = factor(bias_level,
                               levels = c("none", "moderate", "large"))) %>%
-  ggplot(aes(x = method, y = RMSE, fill = method)) +
-  geom_col(alpha = 0.8) +
-  facet_grid(R2 ~ bias_level,
+  ggplot(aes(x = R2, y = RMSE, color = method)) +
+  geom_line(alpha = 0.8) +
+  geom_jitter( width = 0.02, height = 0 ) +
+  facet_wrap( ~ bias_level,
              labeller = labeller(R2 = function(x) paste0("R2 = ", x),
                                   bias_level = function(x) paste0("Bias: ", x))) +
   labs(title = "RMSE across simulation factors",
-       x = NULL, y = "RMSE") +
+       x = "R2", y = "RMSE") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "none")
+        legend.position = "bottom")
 ```
 
 
-# Key takeaways
-
-The simulation framework supports systematic investigation of several
-design questions:
-
-- **Stratified sampling consistently reduces RMSE** relative to SRS
-  when the surrogate predictions have heterogeneous residual variance
-  across strata.
-- **The advantage of stratification grows with R-squared**: when the
-  surrogate is more accurate, strata capture more meaningful
-  variation, and stratified sampling provides greater efficiency gains.
-- **Optimal (Neyman) allocation** offers further improvements over
-  proportional allocation, especially under extreme variance
-  heterogeneity. However, it requires knowledge of within-stratum
-  residual variances, which may not be available before coding.
-- **Bias in the surrogate** does not substantially affect the
-  stratified model-assisted estimator because the bias correction step
-  adjusts for stratum-level prediction errors.
-
-For more on evaluating stratification candidates and comparing oracle
-vs. pre-coding metrics, see `vignette("applied_analysis")`.

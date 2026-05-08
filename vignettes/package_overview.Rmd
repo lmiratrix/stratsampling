@@ -26,34 +26,38 @@ library(stratsampling)
 
 # Introduction
 
-The `stratsampling` package provides tools for **stratified sampling
-designs that leverage surrogate scores** (e.g., machine learning
-predictions) to efficiently estimate treatment effects when human
-coding is expensive.
+Consider the problem of using a surrogate (e.g., machine learning or AI predictions) to estimate the average level in a group or the difference in levels between two groups, when the cost of obtaining the actual outcome is high.
+If the surrogate is systematically off, the estimated level or difference could be off as well.
 
-A common situation in text-as-data experiments is that researchers have
-access to a machine-coded surrogate outcome for the full sample but
+Mozer & Miratrix (CITE THIS) present a method for selecting a random sample of the units and coding them with the actual outcome, and using the differences between surrogate and actual for the subsample to bias correct.
+For example, when using text as an outcome in a randomized trial,  researchers would likely have
+access to a LLM-coded surrogate outcome for the full sample but
 can only afford to have human coders score a subset of observations.
 One key question is which observations should be selected for human
 coding, and how should the final estimate combine the surrogate
 predictions with the coded subsample?
+Mozer, Pashley & Miratrix (2026) give one answer to this question, showing how to use stratified sampling in order to increase precision of the final estimate.
+This package provides the code to implement the methods in these works.
 
-This package implements the methods described in Mozer, Pashley, and
-Miratrix (2026), providing functions for:
 
-1. **Stratification**: Creating and evaluating candidate stratifications
+In this vignette, we provide an overview of the `stratsampling` package.
+The `stratsampling` package provides the following tools:
+
+1. **Stratification**: Create and evaluate candidate stratifications
    based on surrogate scores and covariates.
-2. **Sampling**: Drawing stratified samples with proportional or custom
+2. **Sample**: Draw stratified samples with proportional or custom
    allocation across strata.
-3. **Estimation**: Computing model-assisted estimators that combine
+3. **Estimate**: Compute model-assisted estimators that combine
    surrogate predictions with bias-corrected adjustments from the coded
    subsample.
-4. **Power analysis**: Comparing the statistical power of stratified
-   vs. simple random sampling designs.
+4. **Analyze Power**: Calculate the statistical power of stratified
+   and simple random sampling designs for different levels of coding effort.
+
+
 
 ## Installation
 
-Install the development version from GitHub:
+To use this package, first load it after installing it from GitHub (you may need to install `devtools` from CRAN to make the following code run, and you only need to run the install line once as it will install it permanently on your computer):
 
 ```{r setup, eval=FALSE}
 # install.packages("devtools")
@@ -64,7 +68,7 @@ library(stratsampling)
 
 # A complete workflow
 
-We walk through a complete analysis using the package's built-in toy
+We next walk through a complete analysis using the package's built-in toy
 dataset. The workflow has five steps: (1) load data, (2) choose a
 stratification, (3) draw a sample, (4) code the sample, and
 (5) estimate the treatment effect.
@@ -73,9 +77,10 @@ stratification, (3) draw a sample, (4) code the sample, and
 ## Step 1: Load the data
 
 Suppose you have data from an RCT with a machine-coded surrogate
-outcome (`Yhat`) that approximates the true outcome you plan to
-measure via human coding. The dataset also contains baseline
+outcome (`Yhat`) that is a proxy for some outcome that would be expensive to obtain via human coding.
+The dataset also contains baseline
 covariates and a treatment indicator.
+For example, you might have data that look like this:
 
 ```{r}
 data( toy_data )
@@ -85,6 +90,7 @@ head( toy_data )
 The `toy_data` dataset contains `r nrow(toy_data)` observations with
 three baseline covariates (`X1`, `X2`, `X3`), a surrogate prediction
 (`Yhat`), treatment assignment (`Tx`), and a unique identifier (`ID`).
+`X3` is known to be highly predictive of the actual outcome.
 
 
 ## Step 2: Create and evaluate candidate stratifications
@@ -113,16 +119,20 @@ comparison_precoding <- compare_stratifications_precoding( toy_data,
 head( comparison_precoding )
 ```
 
-Results are sorted by promise, with the best candidate at the top. You
-might select `Yhat_quintiles` or, based on substantive knowledge that
+Results are sorted by promise, with the best candidate at the top.
+You might select `Yhat_quintiles` or, based on substantive knowledge that
 `X3` is a strong predictor of surrogate accuracy, choose a 3-by-3
 interaction stratification.
-The `make_interaction_strata()` function
-creates such stratifications directly:
+
+The `make_interaction_strata()` function creates such stratifications directly:
 
 ```{r}
-toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat, n1 = 3, "Yhat",
-                                            x2 = toy_data$X3, n2 = 3, "X3",
+toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat, 
+                                            n1 = 3, 
+                                            var_name1 = "Yhat",
+                                            x2 = toy_data$X3, 
+                                            n2 = 3, 
+                                            var_name2 = "X3",
                                             z_vec = toy_data$Tx)
 
 # This is equivalent to pulling from the candidate library:
@@ -134,8 +144,8 @@ all.equal( toy_data$strata, alt_strat )
 ## Step 3: Draw a stratified sample
 
 With the stratification in hand, draw a sample using
-`generate_sample_index()`. The function allocates units proportionally
-across strata by default:
+`generate_sample_index()`.
+The function allocates units proportionally across strata by default:
 
 ```{r}
 toy_data$sample <- generate_sample_index( toy_data, 100,
@@ -144,8 +154,10 @@ toy_data$sample <- generate_sample_index( toy_data, 100,
 table( toy_data$strata, toy_data$sample )
 ```
 
-Each stratum has roughly 10% of its units selected for coding. To
-create a coding sheet for human coders:
+Note our 9 strata with around 10% of the documents being coded in each.
+The code will attempt to sample proportional to strata size, unless told otherwise.
+
+To create a coding sheet for human coders:
 
 ```{r, eval=FALSE}
 sheet <- toy_data %>%
@@ -212,10 +224,10 @@ ggplot( sum_stat_plot, aes( Yhat_strat, val,
 
 If bias varies substantially across strata, the stratified model-assisted
 estimator can capture these differences and correct for them, leading to
-more efficient estimation. The residual error panel (`err`) shows how
+more efficient estimation.
+The residual error panel (`err`) shows how
 prediction noise differs across strata; higher heterogeneity in this
-panel is exactly the condition under which stratification yields the
-largest precision gains.
+panel means sampling some strata more than others could have been beneficial.
 
 
 ## Step 5: Estimate the treatment effect
@@ -247,12 +259,15 @@ es_srs <- est_ma_srs( data = full_data,
 es_srs
 ```
 
+Note: As we took a stratified sample, this would be technically invalid; we include it to compare the standard errors (note it is higher in this case).
+
 
 # Power analysis
 
-Before conducting a study, it is useful to compare the statistical
-power of stratified vs. SRS designs. First, estimate the relevant
-design parameters (R-squared values) from pilot data:
+Before conducting a study, it is useful to map out how much gain can be achieved by stratifying, and how much should be human-coded to achieve desired levels of precision.
+
+To do a power analysis, first estimate the relevant
+design parameters (R-squared values of the surrogates for the true outcomes) from pilot data:
 
 ```{r}
 R2s <- estimate_R2( full_data, Yobs = "Yobs", Yhat = "Yhat",
@@ -260,22 +275,12 @@ R2s <- estimate_R2( full_data, Yobs = "Yobs", Yhat = "Yhat",
 R2s
 ```
 
-Then plot MDES (minimum detectable effect size) curves as a function
-of the number of coded units:
+With these in hand, plot MDES (minimum detectable effect size) curves as a function of the number of coded units:
 
 ```{r, messages=FALSE, fig.width=6, fig.height=4}
 target_MDES <- 0.25
 pp <- plot_power_curve( nrow(full_data), mean(full_data$Tx), 1,
                         R2_ML = R2s$R2_ML, R2_strat = R2s$R2_strat )
-
-tbl <- attr( pp, "table" )
-head( tbl )
-
-# Locate where curves cross the target MDES
-crosses <- tbl %>%
-  group_by( Method ) %>%
-  filter( abs(MDES - target_MDES) == min(abs(MDES - target_MDES)) )
-crosses
 
 # Plot with target MDES line
 pp +
@@ -285,20 +290,38 @@ pp +
   expand_limits( y = 0 )
 ```
 
+We can get the values themselves as so:
+```{r}
+tbl <- attr( pp, "table" )
+head( tbl )
+```
+
+We can use the table to locate where curves cross the target MDES:
+```{r}
+crosses <- tbl %>%
+  group_by( Method ) %>%
+  filter( abs(MDES - target_MDES) == min(abs(MDES - target_MDES)) )
+crosses
+```
+
+We would need to code 11% of the documents, if we stratified.
+
 The ratio of required sample sizes tells us how much stratification
 reduces the coding burden:
 
 ```{r}
-crosses$h[[1]] / crosses$h[[2]]
+1 - crosses$h[[1]] / crosses$h[[2]]
 ```
+
+Stratification reduces our coding effort by around 27%!
 
 
 # Next steps
 
-For more advanced topics, see:
+For a few extensions on this package, see the following vignettes:
 
-- `vignette("simulation_framework")` for running simulation studies
-  comparing sampling designs under different data-generating processes.
+- `vignette("simulation_framework")` for running simulation studies to
+  compare sampling designs under different data-generating processes.
 - `vignette("applied_analysis")` for a detailed walkthrough of
-  evaluating and selecting stratifications, including oracle vs.
+  evaluating and selecting from possible stratifications, including oracle vs.
   pre-coding comparisons and optimal allocation.

@@ -13,4 +13,5 @@ tables/
 .RDataTmp
 .RDataTmp1
 old/
+.positai
 inst/doc

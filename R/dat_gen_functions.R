@@ -337,7 +337,7 @@ describe_population <- function(n_strat,
     if ( verbose ) {
         print( knitr::kable( agg, digits = 3) )
     }
-    agg        
+    invisible( agg )
 }
 
 
