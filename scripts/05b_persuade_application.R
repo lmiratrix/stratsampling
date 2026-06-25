@@ -47,8 +47,11 @@ cat("Sample size:", nrow(dat), "\n")
 cat("Mean outcome:", mean(dat$Yobs), "\n")
 
 # Overall R²
-overall_r2 <- cor(dat$Yobs, dat$Yhat)^2
-cat("Overall R² between human and LLM scores:", round(overall_r2, 3), "\n")
+overall_r = cor(dat$Yobs, dat$Yhat)
+overall_r2 = cor(dat$Yobs, dat$Yhat)^2
+SE_r = sqrt((1-overall_r^2)/(nrow(dat)-2))
+
+cat(sprintf("Correlation: %.3f (SE=%.3f)\nOverall R² between human and LLM scores: %.3f\n", overall_r, SE_r, overall_r2))
 
 
 # Calculate residuals
@@ -179,14 +182,14 @@ gridExtra::grid.arrange(p_length, p_pred, p_conf, ncol= 3)
 
 ##  Create and Evaluate Candidate Stratifications
 library(stratsampling)
-dat$Yhat2 = as.numeric(cut(dat$Yhat,breaks=c(0,3,5,6,Inf))) # group rare very low/high scores with closest values
+dat$Yhat_binned = as.numeric(cut(dat$Yhat,breaks=c(0,3,5,6,Inf))) # group rare very low/high scores with closest values
 dat$essay_length = cut(dat$word_count,breaks=c(0,median(dat$word_count),Inf))
 
 
 
 # Create candidate stratifications
-candidates <- create_stratification_candidates(dat,vars = c("Yhat2", "ehat", "word_count"), seed=12345)
-candidates$Yhat2_word_count_4x2 = interaction(dat$Yhat2,dat$essay_length)
+candidates <- create_stratification_candidates(dat,vars = c("Yhat_binned", "ehat", "word_count"), seed=12345)
+candidates$Yhat_binned_word_count_4x2 = interaction(dat$Yhat_binned,dat$essay_length)
 
 
 # Evaluate all candidates
@@ -232,14 +235,14 @@ ggsave("figures/persuade_precoding_strat_variance-reduction.pdf",decomp,  width 
 
 ## Select Final Stratification
 # Apply best stratification
-strat_name="Yhat2_word_count_4x2"
+strat_name="Yhat_binned_word_count_4x2"
 dat$strata <- candidates[[strat_name]] # choose one that doesn't use residuals (oracle)
 
 plot_strata_residuals(dat, dat$strata)
 compute_variance_decomposition(dat, strata=dat$strata,Z=NULL)
 
 levels(dat$essay_length) = c("Low", "High")
-dat$Yhat2 = factor(dat$Yhat2,levels=1:4,labels=c("1-2","3","4","5-6"))
+dat$Yhat2 = factor(dat$Yhat_binned,levels=1:4,labels=c("1-2","3","4","5-6"))
 # Document characteristics
 strata_characteristics <- dat %>%
     group_by( strata, Yhat2, essay_length) %>%
@@ -259,7 +262,7 @@ print(strata_characteristics)
 
 
 ## Output Stratification Characteristics Table
-strata_table <- strata_characteristics %>%
+strata_table <- strata_characteristics %>% arrange(essay_length, Yhat2) %>% 
     mutate(
        k= row_number(),
         `Pred. Quality`=Yhat2,
@@ -271,12 +274,17 @@ strata_table <- strata_characteristics %>%
         `Var(Resid.)` = sprintf("%.2f", var_resid),
         `Avg. Length` = sprintf("%.0f", mean_word_count)
     ) %>% 
-    select( k, `Pred. Quality`, `Word Count`, N, `Mean $\\hat{Y}$`, `Avg. Length`,
-           `Mean Resid.`, `Var(Resid.)`, )
+    select( k,  `Word Count`,`Pred. Quality`, N, 
+           `Mean Resid.`, `Var(Resid.)`) %>%
+    rename( 
+            `$k$`      = k,
+            `$N_{k}$` = N,
+            `Pred. Quality ($\\hat{Y}$)` = `Pred. Quality`
+    )
 
 
 
-kbl(strata_table, format = "latex", booktabs = TRUE,  
+kbl(strata_table, format = "latex", booktabs = TRUE,  label="persuade_strat",
     caption = "Characteristics of final stratification for the PERSUADE corpus determined by predicted quality scores and essay length (word count).",
     linesep=c("", "", "","\\addlinespace"),escape=FALSE) %>% 
     write_file("tables/persuade_empirical_strata.tex")
@@ -289,7 +297,7 @@ source("scripts/application_functions.R")  # From previous code
 source("scripts/sim_functions.R")
 
 # Single sample at 30% coding budget
-single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=1111)
+single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=12345)
 
 comparison_table <- create_comparison_table(single_estimates)
 print(comparison_table)
@@ -323,7 +331,12 @@ print(forest_multi)
 ggsave("figures/persuade_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
 
 
+scatter=oracle_vs_precoding$scatter_plot
 
+
+persuade_figs=list(decomp=decomp, forest_multi=forest_multi, forest_plot=forest_plot, scatter=scatter)
+names(persuade_figs)=paste0("persuade_",names(persuade_figs))
+save(persuade_figs,file="results/persuade_figs.RData")
 
 # -----------------------------------------------------------------------------
 # Retrospective Simulation Study

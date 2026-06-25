@@ -1,6 +1,7 @@
 ---
 title: "Applied Analysis: Evaluating and Selecting Stratifications"
 output: rmarkdown::html_vignette
+bibliography: references.bib
 vignette: >
   %\VignetteEncoding{UTF-8}
   %\VignetteIndexEntry{Applied Analysis: Evaluating and Selecting Stratifications}
@@ -27,17 +28,15 @@ library(stratsampling)
 
 # Introduction
 
-A central decision when stratifying is how to define
-the strata.
-The `stratsampling` package provides two tools for how to select and build a stratification:
+The main design choice in stratified sampling is how to define the strata.
+The goal is to group units so that surrogate errors are more similar within strata than across strata.
+Two diagnostics are useful:
 
-1. **Pre-coding evaluation**: Ranks candidate stratifications using
+1. **Pre-coding evaluation**: Rank candidate stratifications using
    proxy metrics that are available *before* any human coding takes
-   place. This is the practical evaluation a researcher would use when
-   designing a study.
-2. **Oracle evaluation**: Computes the true variance reduction
-   achieved by a list of potential stratifications using the full set of coded
-   outcomes. This serves as a benchmark for exploring how well stratification _could_ work, best case.
+   place. This is the version a researcher can use when designing a study.
+2. **Oracle evaluation**: Compute the variance reduction achieved by
+   candidate stratifications when all outcomes are known. This is mainly a benchmark for simulations, retrospective analyses, and method checks.
    
 This vignette walks through both approaches using simulated data where
 the ground truth is known, and then shows how to apply the pre-coding

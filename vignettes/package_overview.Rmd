@@ -1,6 +1,7 @@
 ---
-title: "Getting Started with `stratsampling`"
+title: "Getting Started with stratsampling"
 output: rmarkdown::html_vignette
+bibliography: references.bib
 vignette: >
   %\VignetteIndexEntry{Getting Started with stratsampling}
   %\VignetteEncoding{UTF-8}
@@ -26,38 +27,32 @@ library(stratsampling)
 
 # Introduction
 
-Consider the problem of using a surrogate (e.g., machine learning or AI predictions) to estimate the average level in a group or the difference in levels between two groups, when the cost of obtaining the actual outcome is high.
-If the surrogate is systematically off, the estimated level or difference could be off as well.
+Many studies now use a surrogate outcome, such as a machine-coded or AI-generated score, when the outcome of interest is expensive to obtain.
+The surrogate may be available for every unit, but it is not the actual outcome.
+If the surrogate is systematically off, estimates based on it alone can also be off.
 
-Mozer & Miratrix (CITE THIS) present a method for selecting a random sample of the units and coding them with the actual outcome, and using the differences between surrogate and actual for the subsample to bias correct.
-For example, when using text as an outcome in a randomized trial,  researchers would likely have
-access to a LLM-coded surrogate outcome for the full sample but
-can only afford to have human coders score a subset of observations.
-One key question is which observations should be selected for human
-coding, and how should the final estimate combine the surrogate
-predictions with the coded subsample?
-Mozer, Pashley & Miratrix (2026) give one answer to this question, showing how to use stratified sampling in order to increase precision of the final estimate.
-This package provides the code to implement the methods in these works.
+Mozer and Miratrix [-@mozer2025more] describe one way to use a human-coded subsample to correct this bias.
+The researcher codes a random subset of units, compares the human-coded outcomes to the surrogate outcomes in that subset, and uses the observed differences to adjust the full-sample surrogate estimate.
+Mozer, Pashley, and Miratrix [-@mozer2026stratified] extend this idea by asking which units should be selected for human coding.
+When surrogate errors vary across observable groups, stratified sampling can reduce uncertainty by making the human-coded sample more informative.
 
+The workflow below has four parts:
 
-In this vignette, we provide an overview of the `stratsampling` package.
-The `stratsampling` package provides the following tools:
-
-1. **Stratification**: Create and evaluate candidate stratifications
+1. **Stratification**: Create and evaluate stratifications
    based on surrogate scores and covariates.
 2. **Sample**: Draw stratified samples with proportional or custom
    allocation across strata.
 3. **Estimate**: Compute model-assisted estimators that combine
    surrogate predictions with bias-corrected adjustments from the coded
    subsample.
-4. **Analyze Power**: Calculate the statistical power of stratified
+4. **Analyze Power**: Compare the precision of stratified
    and simple random sampling designs for different levels of coding effort.
 
 
 
 ## Installation
 
-To use this package, first load it after installing it from GitHub (you may need to install `devtools` from CRAN to make the following code run, and you only need to run the install line once as it will install it permanently on your computer):
+Install the package from GitHub, then load it:
 
 ```{r setup, eval=FALSE}
 # install.packages("devtools")
@@ -68,19 +63,16 @@ library(stratsampling)
 
 # A complete workflow
 
-We next walk through a complete analysis using the package's built-in toy
-dataset. The workflow has five steps: (1) load data, (2) choose a
-stratification, (3) draw a sample, (4) code the sample, and
-(5) estimate the treatment effect.
+The example uses the package's built-in toy dataset.
+The workflow has five steps: load data, choose a stratification, draw a sample, merge the coded outcomes, and estimate the treatment effect.
 
 
 ## Step 1: Load the data
 
 Suppose you have data from an RCT with a machine-coded surrogate
-outcome (`Yhat`) that is a proxy for some outcome that would be expensive to obtain via human coding.
-The dataset also contains baseline
-covariates and a treatment indicator.
-For example, you might have data that look like this:
+outcome (`Yhat`) for every unit.
+The true outcome is expensive to obtain, so it will only be observed for a human-coded subsample.
+The dataset also contains baseline covariates and a treatment indicator:
 
 ```{r}
 data( toy_data )
@@ -95,10 +87,8 @@ three baseline covariates (`X1`, `X2`, `X3`), a surrogate prediction
 
 ## Step 2: Create and evaluate candidate stratifications
 
-The first analytic decision is how to stratify the population. The
-`create_stratification_candidates()` function generates a library of
-candidate stratifications based on different variable combinations and
-numbers of strata:
+The first design choice is how to stratify the population.
+The `create_stratification_candidates()` function generates candidate stratifications based on different variables and numbers of strata:
 
 ```{r}
 candidates <- create_stratification_candidates( toy_data,
@@ -107,10 +97,9 @@ candidates <- create_stratification_candidates( toy_data,
 length( candidates )
 ```
 
-Each candidate is a factor vector assigning every observation to a
-stratum. To compare them, use `compare_stratifications_precoding()`,
-which ranks candidates using proxy metrics that do not require the
-true (coded) outcomes:
+Each candidate is a factor vector assigning every observation to a stratum.
+To compare candidates before coding, use `compare_stratifications_precoding()`.
+This ranks the candidates using proxy metrics based only on the surrogate outcome and observed covariates:
 
 ```{r}
 comparison_precoding <- compare_stratifications_precoding( toy_data,
@@ -119,10 +108,8 @@ comparison_precoding <- compare_stratifications_precoding( toy_data,
 head( comparison_precoding )
 ```
 
-Results are sorted by promise, with the best candidate at the top.
-You might select `Yhat_quintiles` or, based on substantive knowledge that
-`X3` is a strong predictor of surrogate accuracy, choose a 3-by-3
-interaction stratification.
+The table orders candidates by these pre-coding metrics.
+Here, we use a 3-by-3 interaction stratification because `X3` was constructed to be predictive of surrogate accuracy.
 
 The `make_interaction_strata()` function creates such stratifications directly:
 
@@ -143,9 +130,9 @@ all.equal( toy_data$strata, alt_strat )
 
 ## Step 3: Draw a stratified sample
 
-With the stratification in hand, draw a sample using
+With the stratification fixed, draw the human-coded sample using
 `generate_sample_index()`.
-The function allocates units proportionally across strata by default:
+By default, the function samples proportionally within strata:
 
 ```{r}
 toy_data$sample <- generate_sample_index( toy_data, 100,
@@ -154,8 +141,7 @@ toy_data$sample <- generate_sample_index( toy_data, 100,
 table( toy_data$strata, toy_data$sample )
 ```
 
-Note our 9 strata with around 10% of the documents being coded in each.
-The code will attempt to sample proportional to strata size, unless told otherwise.
+The table shows that each of the 9 strata contributes roughly 10% of its documents to the coded sample.
 
 To create a coding sheet for human coders:
 
@@ -171,8 +157,7 @@ write_csv( sheet, "coding_sheet.csv" )
 
 ## Step 4: Merge coded outcomes
 
-After human coding is complete, merge the coded outcomes back into the
-full dataset:
+After coding, merge the human-coded outcomes back into the full dataset:
 
 ```{r}
 data( "toy_data_coded" )
@@ -185,7 +170,7 @@ full_data <- toy_data %>%
 table( sampled=full_data$sample, has_outcome = !is.na( full_data$Yobs ) )
 ```
 
-We can examine how bias and residual error vary across strata:
+The next table summarizes surrogate bias and residual error within each stratum:
 
 ```{r}
 sum_stat <- full_data %>%
@@ -200,9 +185,7 @@ sum_stat <- full_data %>%
 sum_stat
 ```
 
-Because we used a 3 by 3 interaction stratification on `Yhat` and `X3`,
-we can visualize how bias and residual error vary across `Yhat` levels,
-broken out by `X3`:
+Because the stratification crosses `Yhat` and `X3`, we can plot bias and residual error across `Yhat` levels within each `X3` group:
 
 ```{r, fig.width=6, fig.height=3.5}
 sum_stat_plot <- sum_stat %>%
@@ -222,19 +205,15 @@ ggplot( sum_stat_plot, aes( Yhat_strat, val,
   theme_minimal()
 ```
 
-If bias varies substantially across strata, the stratified model-assisted
-estimator can capture these differences and correct for them, leading to
-more efficient estimation.
-The residual error panel (`err`) shows how
-prediction noise differs across strata; higher heterogeneity in this
-panel means sampling some strata more than others could have been beneficial.
+When bias differs across strata, the stratified estimator corrects those differences within strata rather than averaging them over the full sample.
+The residual error panel (`err`) shows whether some strata have noisier surrogate predictions than others.
+If that heterogeneity is large, optimal allocation may be worth considering.
 
 
 ## Step 5: Estimate the treatment effect
 
-The `est_ma_strat()` function computes the stratified model-assisted
-estimator, which debiases the surrogate predictions using the coded
-subsample:
+The `est_ma_strat()` function computes the stratified model-assisted estimator.
+It combines the full-sample surrogate predictions with within-stratum bias corrections estimated from the coded subsample:
 
 ```{r}
 es <- est_ma_strat( data = full_data,
@@ -246,9 +225,8 @@ es <- est_ma_strat( data = full_data,
 es
 ```
 
-The key outputs are `est` (point estimate of the ATE) and `SEhat`
-(estimated standard error). For comparison, we can also compute the
-SRS model-assisted estimator, which ignores the stratification:
+The main outputs are `est` (the ATE estimate) and `SEhat` (the estimated standard error).
+For comparison, we can also compute the SRS model-assisted estimator, which ignores the stratification:
 
 ```{r}
 es_srs <- est_ma_srs( data = full_data,
@@ -259,15 +237,15 @@ es_srs <- est_ma_srs( data = full_data,
 es_srs
 ```
 
-Note: As we took a stratified sample, this would be technically invalid; we include it to compare the standard errors (note it is higher in this case).
+Because the sample was stratified, this SRS calculation is not the estimator we would use for inference.
+It is included only to show how the standard errors compare in this example.
 
 
 # Power analysis
 
-Before conducting a study, it is useful to map out how much gain can be achieved by stratifying, and how much should be human-coded to achieve desired levels of precision.
+Before collecting human-coded outcomes, it is useful to ask how much coding is needed to reach a target level of precision and how much stratification changes that calculation.
 
-To do a power analysis, first estimate the relevant
-design parameters (R-squared values of the surrogates for the true outcomes) from pilot data:
+First estimate the design parameters from pilot data:
 
 ```{r}
 R2s <- estimate_R2( full_data, Yobs = "Yobs", Yhat = "Yhat",
@@ -275,7 +253,7 @@ R2s <- estimate_R2( full_data, Yobs = "Yobs", Yhat = "Yhat",
 R2s
 ```
 
-With these in hand, plot MDES (minimum detectable effect size) curves as a function of the number of coded units:
+Then plot MDES (minimum detectable effect size) curves as a function of the coding fraction:
 
 ```{r, messages=FALSE, fig.width=6, fig.height=4}
 target_MDES <- 0.25
@@ -285,18 +263,17 @@ pp <- plot_power_curve( nrow(full_data), mean(full_data$Tx), 1,
 # Plot with target MDES line
 pp +
   geom_hline( yintercept = target_MDES, lty = 3 ) +
-  geom_vline( xintercept = crosses$h ) +
   scale_y_continuous( breaks = seq(0, 0.3, by = 0.05) ) +
   expand_limits( y = 0 )
 ```
 
-We can get the values themselves as so:
+The underlying values are stored as an attribute of the plot:
 ```{r}
 tbl <- attr( pp, "table" )
 head( tbl )
 ```
 
-We can use the table to locate where curves cross the target MDES:
+Use the table to find where each curve is closest to the target MDES:
 ```{r}
 crosses <- tbl %>%
   group_by( Method ) %>%
@@ -304,7 +281,7 @@ crosses <- tbl %>%
 crosses
 ```
 
-We would need to code 11% of the documents, if we stratified.
+In this toy example, the stratified design reaches the target at about an 11% coding fraction.
 
 The ratio of required sample sizes tells us how much stratification
 reduces the coding burden:
@@ -313,15 +290,17 @@ reduces the coding burden:
 1 - crosses$h[[1]] / crosses$h[[2]]
 ```
 
-Stratification reduces our coding effort by around 27%!
+Here, stratification reduces the required coding effort by about 27%.
 
 
 # Next steps
 
-For a few extensions on this package, see the following vignettes:
+The other vignettes give more detail on simulation and stratification diagnostics:
 
 - `vignette("simulation_framework")` for running simulation studies to
   compare sampling designs under different data-generating processes.
 - `vignette("applied_analysis")` for a detailed walkthrough of
   evaluating and selecting from possible stratifications, including oracle vs.
   pre-coding comparisons and optimal allocation.
+
+# References

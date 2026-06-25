@@ -63,8 +63,8 @@ type_score <- type_object(
   )
 )
 
-chat <- chat_openai(model="gpt-4o-mini")
-out <-parallel_chat_structured(chat, p, type_score, max_active=200,rpm=2000, include_cost = T) # takes about 2 min to run
+chat <- chat_openai(model="gpt-5-mini")
+out <-parallel_chat_structured(chat, p, type_score, max_active=1000,rpm=2000, include_cost = T) # takes about 2 min to run
                                                                               # can go faster by increasing max_active, but this increases cost
 
 sum(out$cost) # how much did running this cost?
@@ -78,7 +78,7 @@ cor(dat$LLM_score, dat$LLM_confidence)
 
 
 
-save(dat, file="generated data/MOREdata-with-LLM-predictions-v3.RData")
+save(dat, file="generated data/MOREdata-with-LLM-predictions-gpt-5-mini.RData")
 
 
 library(ggplot2)

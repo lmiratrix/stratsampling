@@ -49,13 +49,13 @@
   </a>
   <ul class="dropdown-menu" role="menu">
 <li>
-      <a href="../articles/applied_analysis.html">Applied Analysis: Evaluating and Selecting Stratifications</a>
-    </li>
-    <li>
       <a href="../articles/package_overview.html">Getting Started with stratsampling</a>
     </li>
     <li>
       <a href="../articles/simulation_framework.html">Simulation Framework</a>
+    </li>
+    <li>
+      <a href="../articles/applied_analysis.html">Applied Analysis: Evaluating and Selecting Stratifications</a>
     </li>
   </ul>
 </li>
@@ -93,37 +93,41 @@
 <div class="section level2">
 <h2 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h2>
-<p>The <code>stratsampling</code> package provides tools for
-<strong>stratified sampling designs that leverage surrogate
-scores</strong> (e.g., machine learning predictions) to efficiently
-estimate treatment effects when human coding is expensive.</p>
-<p>A common situation in text-as-data experiments is that researchers
-have access to a machine-coded surrogate outcome for the full sample but
-can only afford to have human coders score a subset of observations. The
-key question is: which observations should be selected for human coding,
-and how should the final estimate combine the surrogate predictions with
-the coded subsample?</p>
-<p>This package implements the methods described in Mozer, Pashley, and
-Miratrix (2026), providing functions for:</p>
+<p>Many studies now use a surrogate outcome, such as a machine-coded or
+AI-generated score, when the outcome of interest is expensive to obtain.
+The surrogate may be available for every unit, but it is not the actual
+outcome. If the surrogate is systematically off, estimates based on it
+alone can also be off.</p>
+<p>Mozer and Miratrix <span class="citation">(2025)</span> describe one
+way to use a human-coded subsample to correct this bias. The researcher
+codes a random subset of units, compares the human-coded outcomes to the
+surrogate outcomes in that subset, and uses the observed differences to
+adjust the full-sample surrogate estimate. Mozer, Pashley, and Miratrix
+<span class="citation">(2026)</span> extend this idea by asking which
+units should be selected for human coding. When surrogate errors vary
+across observable groups, stratified sampling can reduce uncertainty by
+making the human-coded sample more informative.</p>
+<p>The workflow below has four parts:</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Stratification</strong>: Creating and evaluating candidate
-stratifications based on surrogate scores and covariates.</li>
+<strong>Stratification</strong>: Create and evaluate stratifications
+based on surrogate scores and covariates.</li>
 <li>
-<strong>Sampling</strong>: Drawing stratified samples with
-proportional or custom allocation across strata.</li>
+<strong>Sample</strong>: Draw stratified samples with proportional
+or custom allocation across strata.</li>
 <li>
-<strong>Estimation</strong>: Computing model-assisted estimators
-that combine surrogate predictions with bias-corrected adjustments from
-the coded subsample.</li>
+<strong>Estimate</strong>: Compute model-assisted estimators that
+combine surrogate predictions with bias-corrected adjustments from the
+coded subsample.</li>
 <li>
-<strong>Power analysis</strong>: Comparing the statistical power of
-stratified vs. simple random sampling designs.</li>
+<strong>Analyze Power</strong>: Compare the precision of stratified
+and simple random sampling designs for different levels of coding
+effort.</li>
 </ol>
 <div class="section level3">
 <h3 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h3>
-<p>Install the development version from GitHub:</p>
+<p>Install the package from GitHub, then load it:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("devtools")</span></span>
 <span><span class="fu">devtools</span><span class="fu">::</span><span class="fu"><a href="https://remotes.r-lib.org/reference/install_github.html" class="external-link">install_github</a></span><span class="op">(</span><span class="st">"lmiratrix/stratsampling"</span><span class="op">)</span></span>
@@ -133,17 +137,17 @@ stratified vs. simple random sampling designs.</li>
 <div class="section level2">
 <h2 id="a-complete-workflow">A complete workflow<a class="anchor" aria-label="anchor" href="#a-complete-workflow"></a>
 </h2>
-<p>We walk through a complete analysis using the package’s built-in toy
-dataset. The workflow has five steps: (1) load data, (2) choose a
-stratification, (3) draw a sample, (4) code the sample, and (5) estimate
-the treatment effect.</p>
+<p>The example uses the package’s built-in toy dataset. The workflow has
+five steps: load data, choose a stratification, draw a sample, merge the
+coded outcomes, and estimate the treatment effect.</p>
 <div class="section level3">
 <h3 id="step-1-load-the-data">Step 1: Load the data<a class="anchor" aria-label="anchor" href="#step-1-load-the-data"></a>
 </h3>
 <p>Suppose you have data from an RCT with a machine-coded surrogate
-outcome (<code>Yhat</code>) that approximates the true outcome you plan
-to measure via human coding. The dataset also contains baseline
-covariates and a treatment indicator.</p>
+outcome (<code>Yhat</code>) for every unit. The true outcome is
+expensive to obtain, so it will only be observed for a human-coded
+subsample. The dataset also contains baseline covariates and a treatment
+indicator:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span> <span class="va">toy_data</span> <span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span> <span class="va">toy_data</span> <span class="op">)</span></span>
@@ -159,16 +163,17 @@ covariates and a treatment indicator.</p>
 <p>The <code>toy_data</code> dataset contains 1000 observations with
 three baseline covariates (<code>X1</code>, <code>X2</code>,
 <code>X3</code>), a surrogate prediction (<code>Yhat</code>), treatment
-assignment (<code>Tx</code>), and a unique identifier
-(<code>ID</code>).</p>
+assignment (<code>Tx</code>), and a unique identifier (<code>ID</code>).
+<code>X3</code> is known to be highly predictive of the actual
+outcome.</p>
 </div>
 <div class="section level3">
 <h3 id="step-2-create-and-evaluate-candidate-stratifications">Step 2: Create and evaluate candidate stratifications<a class="anchor" aria-label="anchor" href="#step-2-create-and-evaluate-candidate-stratifications"></a>
 </h3>
-<p>The first analytic decision is how to stratify the population. The
-<code><a href="../reference/create_stratification_candidates.html">create_stratification_candidates()</a></code> function generates a
-library of candidate stratifications based on different variable
-combinations and numbers of strata:</p>
+<p>The first design choice is how to stratify the population. The
+<code><a href="../reference/create_stratification_candidates.html">create_stratification_candidates()</a></code> function generates
+candidate stratifications based on different variables and numbers of
+strata:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/create_stratification_candidates.html">create_stratification_candidates</a></span><span class="op">(</span> <span class="va">toy_data</span>,</span>
 <span>                                                vars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Yhat"</span>, <span class="st">"X1"</span>, <span class="st">"X2"</span>, <span class="st">"X3"</span><span class="op">)</span>,</span>
@@ -176,9 +181,10 @@ combinations and numbers of strata:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span> <span class="va">candidates</span> <span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 33</span></span></code></pre></div>
 <p>Each candidate is a factor vector assigning every observation to a
-stratum. To compare them, use
-<code><a href="../reference/compare_stratifications_precoding.html">compare_stratifications_precoding()</a></code>, which ranks candidates
-using proxy metrics that do not require the true (coded) outcomes:</p>
+stratum. To compare candidates before coding, use
+<code><a href="../reference/compare_stratifications_precoding.html">compare_stratifications_precoding()</a></code>. This ranks the
+candidates using proxy metrics based only on the surrogate outcome and
+observed covariates:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">comparison_precoding</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compare_stratifications_precoding.html">compare_stratifications_precoding</a></span><span class="op">(</span> <span class="va">toy_data</span>,</span>
 <span>                                                           <span class="va">candidates</span>,</span>
@@ -195,15 +201,18 @@ using proxy metrics that do not require the true (coded) outcomes:</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> Yhat_X2_3x2           6               15              172           6.56</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># ℹ 4 more variables: mean_spread &lt;dbl&gt;, avg_within_var_Yhat &lt;dbl&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   sd_within_var_Yhat &lt;dbl&gt;, total_var_Yhat &lt;dbl&gt;</span></span></span></code></pre></div>
-<p>Results are sorted by promise, with the best candidate at the top.
-You might select <code>Yhat_quintiles</code> or, based on substantive
-knowledge that <code>X3</code> is a strong predictor of surrogate
-accuracy, choose a 3-by-3 interaction stratification. The
-<code><a href="../reference/make_interaction_strata.html">make_interaction_strata()</a></code> function creates such
+<p>The table orders candidates by these pre-coding metrics. Here, we use
+a 3-by-3 interaction stratification because <code>X3</code> was
+constructed to be predictive of surrogate accuracy.</p>
+<p>The <code><a href="../reference/make_interaction_strata.html">make_interaction_strata()</a></code> function creates such
 stratifications directly:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">toy_data</span><span class="op">$</span><span class="va">strata</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_interaction_strata.html">make_interaction_strata</a></span><span class="op">(</span> x1 <span class="op">=</span> <span class="va">toy_data</span><span class="op">$</span><span class="va">Yhat</span>, n1 <span class="op">=</span> <span class="fl">3</span>, <span class="st">"Yhat"</span>,</span>
-<span>                                            x2 <span class="op">=</span> <span class="va">toy_data</span><span class="op">$</span><span class="va">X3</span>, n2 <span class="op">=</span> <span class="fl">3</span>, <span class="st">"X3"</span>,</span>
+<code class="sourceCode R"><span><span class="va">toy_data</span><span class="op">$</span><span class="va">strata</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_interaction_strata.html">make_interaction_strata</a></span><span class="op">(</span> x1 <span class="op">=</span> <span class="va">toy_data</span><span class="op">$</span><span class="va">Yhat</span>, </span>
+<span>                                            n1 <span class="op">=</span> <span class="fl">3</span>, </span>
+<span>                                            var_name1 <span class="op">=</span> <span class="st">"Yhat"</span>,</span>
+<span>                                            x2 <span class="op">=</span> <span class="va">toy_data</span><span class="op">$</span><span class="va">X3</span>, </span>
+<span>                                            n2 <span class="op">=</span> <span class="fl">3</span>, </span>
+<span>                                            var_name2 <span class="op">=</span> <span class="st">"X3"</span>,</span>
 <span>                                            z_vec <span class="op">=</span> <span class="va">toy_data</span><span class="op">$</span><span class="va">Tx</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># This is equivalent to pulling from the candidate library:</span></span>
@@ -214,9 +223,9 @@ stratifications directly:</p>
 <div class="section level3">
 <h3 id="step-3-draw-a-stratified-sample">Step 3: Draw a stratified sample<a class="anchor" aria-label="anchor" href="#step-3-draw-a-stratified-sample"></a>
 </h3>
-<p>With the stratification in hand, draw a sample using
-<code><a href="../reference/generate_sample_index.html">generate_sample_index()</a></code>. The function allocates units
-proportionally across strata by default:</p>
+<p>With the stratification fixed, draw the human-coded sample using
+<code><a href="../reference/generate_sample_index.html">generate_sample_index()</a></code>. By default, the function samples
+proportionally within strata:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">toy_data</span><span class="op">$</span><span class="va">sample</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/generate_sample_index.html">generate_sample_index</a></span><span class="op">(</span> <span class="va">toy_data</span>, <span class="fl">100</span>,</span>
 <span>                                          Z <span class="op">=</span> <span class="st">"Tx"</span>, strata <span class="op">=</span> <span class="st">"strata"</span>,</span>
@@ -233,8 +242,9 @@ proportionally across strata by default:</p>
 <span><span class="co">#&gt;   Low Yhat / X3=3  112  12</span></span>
 <span><span class="co">#&gt;   Med Yhat / X3=3   86   9</span></span>
 <span><span class="co">#&gt;   High Yhat / X3=3 103  11</span></span></code></pre></div>
-<p>Each stratum has roughly 10% of its units selected for coding. To
-create a coding sheet for human coders:</p>
+<p>The table shows that each of the 9 strata contributes roughly 10% of
+its documents to the coded sample.</p>
+<p>To create a coding sheet for human coders:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sheet</span> <span class="op">&lt;-</span> <span class="va">toy_data</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span> <span class="va">sample</span> <span class="op">==</span> <span class="fl">1</span> <span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
@@ -246,8 +256,8 @@ create a coding sheet for human coders:</p>
 <div class="section level3">
 <h3 id="step-4-merge-coded-outcomes">Step 4: Merge coded outcomes<a class="anchor" aria-label="anchor" href="#step-4-merge-coded-outcomes"></a>
 </h3>
-<p>After human coding is complete, merge the coded outcomes back into
-the full dataset:</p>
+<p>After coding, merge the human-coded outcomes back into the full
+dataset:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span> <span class="st">"toy_data_coded"</span> <span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span> <span class="va">toy_data_coded</span> <span class="op">)</span></span>
@@ -265,12 +275,13 @@ the full dataset:</p>
 <span>    <span class="fu">left_join</span><span class="op">(</span> <span class="va">toy_data_coded</span>, by <span class="op">=</span> <span class="st">"ID"</span> <span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Verify all targeted documents were coded</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span> <span class="va">full_data</span><span class="op">$</span><span class="va">sample</span>, <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span> <span class="va">full_data</span><span class="op">$</span><span class="va">Yobs</span> <span class="op">)</span> <span class="op">)</span></span>
-<span><span class="co">#&gt;    </span></span>
-<span><span class="co">#&gt;     FALSE TRUE</span></span>
-<span><span class="co">#&gt;   0   900    0</span></span>
-<span><span class="co">#&gt;   1     0  100</span></span></code></pre></div>
-<p>We can examine how bias and residual error vary across strata:</p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span> sampled<span class="op">=</span><span class="va">full_data</span><span class="op">$</span><span class="va">sample</span>, has_outcome <span class="op">=</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span> <span class="va">full_data</span><span class="op">$</span><span class="va">Yobs</span> <span class="op">)</span> <span class="op">)</span></span>
+<span><span class="co">#&gt;        has_outcome</span></span>
+<span><span class="co">#&gt; sampled FALSE TRUE</span></span>
+<span><span class="co">#&gt;       0   900    0</span></span>
+<span><span class="co">#&gt;       1     0  100</span></span></code></pre></div>
+<p>The next table summarizes surrogate bias and residual error within
+each stratum:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sum_stat</span> <span class="op">&lt;-</span> <span class="va">full_data</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">group_by</span><span class="op">(</span> <span class="va">strata</span> <span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
@@ -294,10 +305,9 @@ the full dataset:</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span> Low Yhat / X3=2    106     10     -<span style="color: #BB0000;">2.38</span> -<span style="color: #BB0000;">1.55</span>  -<span style="color: #BB0000;">0.834</span>  1.11 </span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span> Low Yhat / X3=1    104     10     -<span style="color: #BB0000;">2.51</span> -<span style="color: #BB0000;">3.56</span>   1.05   0.266</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">9</span> Low Yhat / X3=3    124     12     -<span style="color: #BB0000;">2.63</span> -<span style="color: #BB0000;">1.01</span>  -<span style="color: #BB0000;">1.62</span>   1.06</span></span></code></pre></div>
-<p>Because we used a 3-by-3 interaction stratification on
-<code>Yhat</code> and <code>X3</code>, we can visualize how bias and
-residual error vary across <code>Yhat</code> levels, broken out by
-<code>X3</code>:</p>
+<p>Because the stratification crosses <code>Yhat</code> and
+<code>X3</code>, we can plot bias and residual error across
+<code>Yhat</code> levels within each <code>X3</code> group:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sum_stat_plot</span> <span class="op">&lt;-</span> <span class="va">sum_stat</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">separate</span><span class="op">(</span> <span class="va">strata</span>, into <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Yhat_strat"</span>, <span class="st">"X3_strat"</span><span class="op">)</span>, sep <span class="op">=</span> <span class="st">" / "</span> <span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
@@ -315,19 +325,19 @@ residual error vary across <code>Yhat</code> levels, broken out by
 <span>  <span class="fu">labs</span><span class="op">(</span> x <span class="op">=</span> <span class="st">"Yhat stratum"</span>, y <span class="op">=</span> <span class="st">"Value"</span>, color <span class="op">=</span> <span class="st">"X3 stratum"</span> <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">theme_minimal</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="package_overview_files/figure-html/unnamed-chunk-10-1.png" alt="" width="75%" style="display: block; margin: auto;"></p>
-<p>If bias varies substantially across strata, the stratified
-model-assisted estimator can capture these differences and correct for
-them, leading to more efficient estimation. The residual error panel
-(<code>err</code>) shows how prediction noise differs across strata;
-higher heterogeneity in this panel is exactly the condition under which
-stratification yields the largest precision gains.</p>
+<p>When bias differs across strata, the stratified estimator corrects
+those differences within strata rather than averaging them over the full
+sample. The residual error panel (<code>err</code>) shows whether some
+strata have noisier surrogate predictions than others. If that
+heterogeneity is large, optimal allocation may be worth considering.</p>
 </div>
 <div class="section level3">
 <h3 id="step-5-estimate-the-treatment-effect">Step 5: Estimate the treatment effect<a class="anchor" aria-label="anchor" href="#step-5-estimate-the-treatment-effect"></a>
 </h3>
 <p>The <code><a href="../reference/est_ma_strat.html">est_ma_strat()</a></code> function computes the stratified
-model-assisted estimator, which debiases the surrogate predictions using
-the coded subsample:</p>
+model-assisted estimator. It combines the full-sample surrogate
+predictions with within-stratum bias corrections estimated from the
+coded subsample:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">es</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/est_ma_strat.html">est_ma_strat</a></span><span class="op">(</span> data <span class="op">=</span> <span class="va">full_data</span>,</span>
 <span>                    Yobs <span class="op">=</span> <span class="st">"Yobs"</span>,</span>
@@ -338,9 +348,9 @@ the coded subsample:</p>
 <span><span class="va">es</span></span>
 <span><span class="co">#&gt;        est SE     SEhat SEhat.full SEhat.samp    S2.0     S2.1</span></span>
 <span><span class="co">#&gt; 1 2.103955 NA 0.2855843  0.1892718  0.2138564 6.63857 11.27334</span></span></code></pre></div>
-<p>The key outputs are <code>est</code> (point estimate of the ATE) and
-<code>SEhat</code> (estimated standard error). For comparison, we can
-also compute the SRS model-assisted estimator, which ignores the
+<p>The main outputs are <code>est</code> (the ATE estimate) and
+<code>SEhat</code> (the estimated standard error). For comparison, we
+can also compute the SRS model-assisted estimator, which ignores the
 stratification:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">es_srs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/est_ma_srs.html">est_ma_srs</a></span><span class="op">(</span> data <span class="op">=</span> <span class="va">full_data</span>,</span>
@@ -351,14 +361,18 @@ stratification:</p>
 <span><span class="va">es_srs</span></span>
 <span><span class="co">#&gt;        est SE     SEhat SEhat.full SEhat.samp     S2.0     S2.1</span></span>
 <span><span class="co">#&gt; 1 2.082851 NA 0.3151378  0.1899984  0.2514209 6.695346 11.35435</span></span></code></pre></div>
+<p>Because the sample was stratified, this SRS calculation is not the
+estimator we would use for inference. It is included only to show how
+the standard errors compare in this example.</p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="power-analysis">Power analysis<a class="anchor" aria-label="anchor" href="#power-analysis"></a>
 </h2>
-<p>Before conducting a study, it is useful to compare the statistical
-power of stratified vs. SRS designs. First, estimate the relevant design
-parameters (R-squared values) from pilot data:</p>
+<p>Before collecting human-coded outcomes, it is useful to ask how much
+coding is needed to reach a target level of precision and how much
+stratification changes that calculation.</p>
+<p>First estimate the design parameters from pilot data:</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">R2s</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/estimate_R2.html">estimate_R2</a></span><span class="op">(</span> <span class="va">full_data</span>, Yobs <span class="op">=</span> <span class="st">"Yobs"</span>, Yhat <span class="op">=</span> <span class="st">"Yhat"</span>,</span>
 <span>                    Z <span class="op">=</span> <span class="st">"Tx"</span>, strata <span class="op">=</span> <span class="st">"strata"</span> <span class="op">)</span></span>
@@ -368,13 +382,21 @@ parameters (R-squared values) from pilot data:</p>
 <span><span class="co">#&gt;      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>    0.312  <span style="text-decoration: underline;">1</span>000    18 0.825</span></span></code></pre></div>
 <p>Then plot MDES (minimum detectable effect size) curves as a function
-of the number of coded units:</p>
+of the coding fraction:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">target_MDES</span> <span class="op">&lt;-</span> <span class="fl">0.25</span></span>
 <span><span class="va">pp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/make_power_table.html">plot_power_curve</a></span><span class="op">(</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">full_data</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">full_data</span><span class="op">$</span><span class="va">Tx</span><span class="op">)</span>, <span class="fl">1</span>,</span>
 <span>                        R2_ML <span class="op">=</span> <span class="va">R2s</span><span class="op">$</span><span class="va">R2_ML</span>, R2_strat <span class="op">=</span> <span class="va">R2s</span><span class="op">$</span><span class="va">R2_strat</span> <span class="op">)</span></span>
 <span></span>
-<span><span class="va">tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span> <span class="va">pp</span>, <span class="st">"table"</span> <span class="op">)</span></span>
+<span><span class="co"># Plot with target MDES line</span></span>
+<span><span class="va">pp</span> <span class="op">+</span></span>
+<span>  <span class="fu">geom_hline</span><span class="op">(</span> yintercept <span class="op">=</span> <span class="va">target_MDES</span>, lty <span class="op">=</span> <span class="fl">3</span> <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">scale_y_continuous</span><span class="op">(</span> breaks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.3</span>, by <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span> <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">expand_limits</span><span class="op">(</span> y <span class="op">=</span> <span class="fl">0</span> <span class="op">)</span></span></code></pre></div>
+<p><img src="package_overview_files/figure-html/unnamed-chunk-14-1.png" alt="" width="75%" style="display: block; margin: auto;"></p>
+<p>The underlying values are stored as an attribute of the plot:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">tbl</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span> <span class="va">pp</span>, <span class="st">"table"</span> <span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span> <span class="va">tbl</span> <span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 6 × 4</span></span></span>
 <span><span class="co">#&gt;   Method         h     SE  MDES</span></span>
@@ -384,10 +406,11 @@ of the number of coded units:</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> Stratified  0.07 0.102  0.285</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> Stratified  0.08 0.097<span style="text-decoration: underline;">7</span> 0.273</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span> Stratified  0.09 0.094<span style="text-decoration: underline;">2</span> 0.264</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> Stratified  0.1  0.091<span style="text-decoration: underline;">3</span> 0.256</span></span>
-<span></span>
-<span><span class="co"># Locate where curves cross the target MDES</span></span>
-<span><span class="va">crosses</span> <span class="op">&lt;-</span> <span class="va">tbl</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span> Stratified  0.1  0.091<span style="text-decoration: underline;">3</span> 0.256</span></span></code></pre></div>
+<p>Use the table to find where each curve is closest to the target
+MDES:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">crosses</span> <span class="op">&lt;-</span> <span class="va">tbl</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">group_by</span><span class="op">(</span> <span class="va">Method</span> <span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/stats/filter.html" class="external-link">filter</a></span><span class="op">(</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">MDES</span> <span class="op">-</span> <span class="va">target_MDES</span><span class="op">)</span> <span class="op">==</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">MDES</span> <span class="op">-</span> <span class="va">target_MDES</span><span class="op">)</span><span class="op">)</span> <span class="op">)</span></span>
 <span><span class="va">crosses</span></span>
@@ -396,35 +419,49 @@ of the number of coded units:</p>
 <span><span class="co">#&gt;   Method         h     SE  MDES</span></span>
 <span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Stratified  0.11 0.088<span style="text-decoration: underline;">9</span> 0.249</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> SRS         0.15 0.089<span style="text-decoration: underline;">2</span> 0.250</span></span>
-<span></span>
-<span><span class="co"># Plot with target MDES line</span></span>
-<span><span class="va">pp</span> <span class="op">+</span></span>
-<span>  <span class="fu">geom_hline</span><span class="op">(</span> yintercept <span class="op">=</span> <span class="va">target_MDES</span>, lty <span class="op">=</span> <span class="fl">3</span> <span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">geom_vline</span><span class="op">(</span> xintercept <span class="op">=</span> <span class="va">crosses</span><span class="op">$</span><span class="va">h</span> <span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">scale_y_continuous</span><span class="op">(</span> breaks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.3</span>, by <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span> <span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">expand_limits</span><span class="op">(</span> y <span class="op">=</span> <span class="fl">0</span> <span class="op">)</span></span></code></pre></div>
-<p><img src="package_overview_files/figure-html/unnamed-chunk-14-1.png" alt="" width="75%" style="display: block; margin: auto;"></p>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> SRS         0.15 0.089<span style="text-decoration: underline;">2</span> 0.250</span></span></code></pre></div>
+<p>In this toy example, the stratified design reaches the target at
+about an 11% coding fraction.</p>
 <p>The ratio of required sample sizes tells us how much stratification
 reduces the coding burden:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">crosses</span><span class="op">$</span><span class="va">h</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">/</span> <span class="va">crosses</span><span class="op">$</span><span class="va">h</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span></span>
-<span><span class="co">#&gt; [1] 0.7333333</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fl">1</span> <span class="op">-</span> <span class="va">crosses</span><span class="op">$</span><span class="va">h</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">/</span> <span class="va">crosses</span><span class="op">$</span><span class="va">h</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="co">#&gt; [1] 0.2666667</span></span></code></pre></div>
+<p>Here, stratification reduces the required coding effort by about
+27%.</p>
 </div>
 <div class="section level2">
 <h2 id="next-steps">Next steps<a class="anchor" aria-label="anchor" href="#next-steps"></a>
 </h2>
-<p>For more advanced topics, see:</p>
+<p>The other vignettes give more detail on simulation and stratification
+diagnostics:</p>
 <ul>
 <li>
 <code><a href="../articles/simulation_framework.html">vignette("simulation_framework")</a></code> for running simulation
-studies comparing sampling designs under different data-generating
+studies to compare sampling designs under different data-generating
 processes.</li>
 <li>
 <code><a href="../articles/applied_analysis.html">vignette("applied_analysis")</a></code> for a detailed walkthrough
-of evaluating and selecting stratifications, including oracle vs.
-pre-coding comparisons and optimal allocation.</li>
+of evaluating and selecting from possible stratifications, including
+oracle vs. pre-coding comparisons and optimal allocation.</li>
 </ul>
+</div>
+<div class="section level2">
+<h2 class="unnumbered" id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
+</h2>
+<div id="refs" class="references csl-bib-body hanging-indent" entry-spacing="0">
+<div id="ref-mozer2025more" class="csl-entry">
+Mozer, Reagan, and Luke Miratrix. 2025. <span>“More Power to You: Using
+Machine Learning to Augment Human Coding for More Efficient Inference in
+Text-Based Randomized Trials.”</span> <em>The Annals of Applied
+Statistics</em> 19 (1): 440–64.
+</div>
+<div id="ref-mozer2026stratified" class="csl-entry">
+Mozer, Reagan, Nicole E Pashley, and Luke Miratrix. 2026.
+<span>“Stratified Sampling for Model-Assisted Estimation with Surrogate
+Outcomes.”</span> <em>arXiv Preprint arXiv:2602.12992</em>.
+</div>
+</div>
 </div>
   </div>
 

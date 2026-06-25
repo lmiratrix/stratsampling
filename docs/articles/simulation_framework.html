@@ -49,13 +49,13 @@
   </a>
   <ul class="dropdown-menu" role="menu">
 <li>
-      <a href="../articles/applied_analysis.html">Applied Analysis: Evaluating and Selecting Stratifications</a>
-    </li>
-    <li>
       <a href="../articles/package_overview.html">Getting Started with stratsampling</a>
     </li>
     <li>
       <a href="../articles/simulation_framework.html">Simulation Framework</a>
+    </li>
+    <li>
+      <a href="../articles/applied_analysis.html">Applied Analysis: Evaluating and Selecting Stratifications</a>
     </li>
   </ul>
 </li>
@@ -93,27 +93,24 @@
 <div class="section level2">
 <h2 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h2>
-<p>The <code>stratsampling</code> package includes a flexible
-data-generating process (DGP) for running Monte Carlo simulations that
-compare stratified and simple random sampling designs. This vignette
-describes how to generate simulated populations, configure the key
-simulation factors, and run repeated-sampling experiments that evaluate
-estimator performance.</p>
-<p>The simulation framework is designed around three core questions:</p>
-<ol style="list-style-type: decimal">
-<li>How much does stratified sampling improve precision over SRS?</li>
-<li>Under what conditions is the improvement largest (or smallest)?</li>
-<li>How does optimal (Neyman) allocation compare to proportional
-allocation?</li>
-</ol>
+<p>The <code>stratsampling</code> package includes a data-generating
+process (DGP) for comparing stratified and simple random sampling
+designs. The examples below show how to generate simulated populations,
+vary the structure of surrogate prediction error, and run Monte Carlo
+experiments.</p>
 </div>
 <div class="section level2">
 <h2 id="generating-a-simulated-population">Generating a simulated population<a class="anchor" aria-label="anchor" href="#generating-a-simulated-population"></a>
 </h2>
-<p>The <code><a href="../reference/generate_population.html">generate_population()</a></code> function creates a population
-of <code>N</code> units with potential outcomes, treatment assignment,
-and surrogate predictions. The surrogate predictions are constructed by
-adding stratum-specific bias and noise to the true outcomes.</p>
+<p>The <code><a href="../reference/generate_population.html">generate_population()</a></code> function creates a randomized
+experiment with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>N</mi><annotation encoding="application/x-tex">N</annotation></semantics></math>
+units, potential outcomes, treatment assignment, observed outcomes, and
+surrogate predictions. The surrogate predictions are constructed by
+adding stratum-specific bias and noise to the true outcomes. This mimics
+the setting where an LLM or other automated system produces an outcome
+measure that is correlated with, but not identical to, the human-coded
+outcome.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span> <span class="fl">42</span> <span class="op">)</span></span>
 <span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/generate_population.html">generate_population</a></span><span class="op">(</span>N <span class="op">=</span> <span class="fl">2000</span>,</span>
@@ -151,25 +148,30 @@ noise).</li>
 <li>
 <code>ID</code>: Unique unit identifier.</li>
 </ul>
-<p>A boxplot of the surrogate predictions by stratum and treatment arm
-gives an immediate visual summary of the generated population. In
-particular, you can see how the distribution of <code>Yhat</code> varies
-across strata and whether the treatment shift (the gap between treatment
-and control boxes within each stratum) is consistent:</p>
+<p>A boxplot of the errors by stratum and treatment arm gives an
+immediate visual summary of how the surrogate may be systematically off.
+particular, you can see how the distribution of <code>Y - Yhat</code>
+varies across strata for both treatment arms.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">ggplot</span><span class="op">(</span> <span class="va">dat</span>, <span class="fu">aes</span><span class="op">(</span> x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/interaction.html" class="external-link">interaction</a></span><span class="op">(</span><span class="va">strata</span>, <span class="va">Z</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">Yhat</span>, color <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">Z</span><span class="op">)</span> <span class="op">)</span> <span class="op">)</span> <span class="op">+</span></span>
+<code class="sourceCode R"><span><span class="fu">ggplot</span><span class="op">(</span> <span class="va">dat</span>, <span class="fu">aes</span><span class="op">(</span> x <span class="op">=</span> <span class="va">strata</span>, </span>
+<span>                  y <span class="op">=</span> <span class="va">Yobs</span> <span class="op">-</span> <span class="va">Yhat</span>, color <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">Z</span><span class="op">)</span>,</span>
+<span>                  group <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/interaction.html" class="external-link">interaction</a></span><span class="op">(</span><span class="va">Z</span>,<span class="va">strata</span><span class="op">)</span> <span class="op">)</span> <span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">geom_boxplot</span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">labs</span><span class="op">(</span> x <span class="op">=</span> <span class="st">"Stratum x Treatment arm"</span>, y <span class="op">=</span> <span class="st">"Surrogate prediction (Yhat)"</span>,</span>
 <span>        color <span class="op">=</span> <span class="st">"Treatment (Z)"</span> <span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">theme</span><span class="op">(</span> axis.text.x <span class="op">=</span> <span class="fu">element_text</span><span class="op">(</span> angle <span class="op">=</span> <span class="fl">45</span>, hjust <span class="op">=</span> <span class="fl">1</span> <span class="op">)</span> <span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu">theme</span><span class="op">(</span> axis.text.x <span class="op">=</span> <span class="fu">element_text</span><span class="op">(</span> angle <span class="op">=</span> <span class="fl">45</span>, hjust <span class="op">=</span> <span class="fl">1</span> <span class="op">)</span> <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">geom_hline</span><span class="op">(</span> yintercept <span class="op">=</span> <span class="fl">0</span> <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">theme_minimal</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="simulation_framework_files/figure-html/unnamed-chunk-3-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
+<p>For this particular DGP, we see systematic bias in some of the
+strata, and more variation in the size of error across strata.</p>
 </div>
 <div class="section level2">
 <h2 id="simulation-factors">Simulation factors<a class="anchor" aria-label="anchor" href="#simulation-factors"></a>
 </h2>
 <p>The DGP is controlled by several parameters that govern the structure
-of the surrogate predictions. Understanding these factors is important
-for designing informative simulation studies.</p>
+of the surrogate predictions. We walk through some of the core ones in
+the following.</p>
 <div class="section level3">
 <h3 id="surrogate-accuracy-r2_target">Surrogate accuracy (<code>R2_target</code>)<a class="anchor" aria-label="anchor" href="#surrogate-accuracy-r2_target"></a>
 </h3>
@@ -225,7 +227,8 @@ strata.</li>
 size), so the overall surrogate mean equals the overall true mean on
 average.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bias_scenarios</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"none"</span>, <span class="st">"small"</span>, <span class="st">"moderate"</span>, <span class="st">"large"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">bias_scenarios</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"small"</span>, <span class="st">"moderate"</span>, <span class="st">"large"</span>,</span>
+<span>                    <span class="st">"extreme-contrast"</span><span class="op">)</span></span>
 <span><span class="va">dat_bias</span> <span class="op">&lt;-</span> <span class="fu">map_dfr</span><span class="op">(</span><span class="va">bias_scenarios</span>, <span class="kw">function</span><span class="op">(</span><span class="va">b</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">d</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/generate_population.html">generate_population</a></span><span class="op">(</span>N <span class="op">=</span> <span class="fl">3000</span>, n_strat <span class="op">=</span> <span class="fl">5</span>, tau <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>                           bias <span class="op">=</span> <span class="va">b</span>,</span>
@@ -243,7 +246,8 @@ average.</p>
 <span>  <span class="fu">geom_col</span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">facet_wrap</span><span class="op">(</span><span class="op">~</span><span class="va">bias_level</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">labs</span><span class="op">(</span>title <span class="op">=</span> <span class="st">"Stratum-level bias under different bias settings"</span>,</span>
-<span>       x <span class="op">=</span> <span class="st">"Stratum"</span>, y <span class="op">=</span> <span class="st">"Mean bias (Yhat - Yobs)"</span><span class="op">)</span> <span class="op">+</span></span>
+<span>       x <span class="op">=</span> <span class="st">"Stratum"</span>, y <span class="op">=</span> <span class="st">"Mean bias (Yhat - Yobs)"</span>,</span>
+<span>       caption <span class="op">=</span><span class="st">"'none' omitted as there is nothing to see"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">theme</span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="simulation_framework_files/figure-html/unnamed-chunk-5-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
 </div>
@@ -251,8 +255,8 @@ average.</p>
 <h3 id="residual-variance-heterogeneity-residual_var">Residual variance heterogeneity (<code>residual_var</code>)<a class="anchor" aria-label="anchor" href="#residual-variance-heterogeneity-residual_var"></a>
 </h3>
 <p>The <code>residual_var</code> parameter controls whether prediction
-errors are equally variable across strata or concentrated in certain
-strata:</p>
+errors (not including bias) are equally variable across strata or
+concentrated in certain strata:</p>
 <ul>
 <li>
 <code>"homogeneous"</code>: Equal residual variance in all
@@ -261,8 +265,8 @@ strata.</li>
 <code>"heterogeneous"</code>: Linearly increasing variance across
 strata.</li>
 <li>
-<code>"extreme-contrast"</code>: One stratum with very high
-variance, one with very low variance (requires at least 3 strata).</li>
+<code>"extreme-contrast"</code>: One stratum with very high variance
+and one with very low variance (requires at least 3 strata).</li>
 </ul>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">var_scenarios</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"homogeneous"</span>, <span class="st">"heterogeneous"</span>, <span class="st">"extreme-contrast"</span><span class="op">)</span></span>
@@ -293,8 +297,8 @@ variance, one with very low variance (requires at least 3 strata).</li>
 <p>The <code>strata_config</code> parameter controls stratum sizes:</p>
 <ul>
 <li>
-<code>"balanced-exact"</code>: Equal sizes (requires N divisible by
-n_strat).</li>
+<code>"balanced-exact"</code>: Equal sizes (requires <code>N</code>
+divisible by <code>n_strat</code>).</li>
 <li>
 <code>"balanced-approx"</code>: Approximately equal via random
 assignment.</li>
@@ -303,12 +307,13 @@ assignment.</li>
 distribution.</li>
 </ul>
 </div>
-<div class="section level3">
-<h3 id="inspecting-the-dgp">Inspecting the DGP<a class="anchor" aria-label="anchor" href="#inspecting-the-dgp"></a>
-</h3>
-<p>The <code><a href="../reference/describe_population.html">describe_population()</a></code> function summarizes how the
-simulation factors interact to produce the population-level
-properties:</p>
+</div>
+<div class="section level2">
+<h2 id="inspecting-the-dgp">Inspecting the DGP<a class="anchor" aria-label="anchor" href="#inspecting-the-dgp"></a>
+</h2>
+<p>The <code><a href="../reference/describe_population.html">describe_population()</a></code> function summarizes a
+generated dataset. It gives two tables, one of strata-level
+characteristics and one of overall population characteristics.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/describe_population.html">describe_population</a></span><span class="op">(</span>n_strat <span class="op">=</span> <span class="fl">5</span>,</span>
 <span>                    bias <span class="op">=</span> <span class="st">"moderate"</span>,</span>
@@ -333,14 +338,9 @@ properties:</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; |   Z| Var_b| E_sig2| prop_bias|    R2|</span></span>
 <span><span class="co">#&gt; |---:|-----:|------:|---------:|-----:|</span></span>
-<span><span class="co">#&gt; | 0.5|  1.43|  1.265|     0.531| 0.702|</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 1 × 5</span></span></span>
-<span><span class="co">#&gt;       Z Var_b E_sig2 prop_bias    R2</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>   0.5  1.43   1.26     0.531 0.702</span></span></code></pre></div>
-<p>This is useful for verifying that the DGP produces the intended
-properties before running a large simulation.</p>
-</div>
+<span><span class="co">#&gt; | 0.5|  1.43|  1.265|     0.531| 0.702|</span></span></code></pre></div>
+<p>This method is useful for verifying that the DGP produces the
+intended properties before running a large simulation.</p>
 </div>
 <div class="section level2">
 <h2 id="running-a-simulation-study">Running a simulation study<a class="anchor" aria-label="anchor" href="#running-a-simulation-study"></a>
@@ -363,7 +363,7 @@ proportional stratified sampling.</li>
 Neyman (optimal) allocation.</li>
 </ol>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Fix one population</span></span>
+<code class="sourceCode R"><span><span class="co"># Generate a single population</span></span>
 <span><span class="va">pop</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/generate_population.html">generate_population</a></span><span class="op">(</span>N <span class="op">=</span> <span class="fl">2000</span>, n_strat <span class="op">=</span> <span class="fl">5</span>, tau <span class="op">=</span> <span class="fl">0.5</span>,</span>
 <span>                           bias <span class="op">=</span> <span class="st">"moderate"</span>,</span>
 <span>                           residual_var <span class="op">=</span> <span class="st">"heterogeneous"</span>,</span>
@@ -379,26 +379,25 @@ Neyman (optimal) allocation.</li>
 <span>  <span class="va">samp_srs</span> <span class="op">&lt;-</span> <span class="va">pop</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span> <span class="fu">group_by</span><span class="op">(</span><span class="va">Z</span><span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span> <span class="fu">sample_n</span><span class="op">(</span><span class="va">n_code</span> <span class="op">/</span> <span class="fl">2</span><span class="op">)</span></span>
 <span>  <span class="va">pop_sub</span> <span class="op">&lt;-</span> <span class="va">pop</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span> <span class="fu">mutate</span><span class="op">(</span>S <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">ID</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">samp_srs</span><span class="op">$</span><span class="va">ID</span>, <span class="fl">1</span>, <span class="fl">0</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="va">out_subset</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/est_subset.html">est_subset</a></span><span class="op">(</span><span class="va">pop_sub</span>, S <span class="op">=</span> <span class="va">pop_sub</span><span class="op">$</span><span class="va">S</span><span class="op">)</span></span>
-<span>  <span class="va">out_subset</span><span class="op">$</span><span class="va">method</span> <span class="op">&lt;-</span> <span class="st">"Subset"</span></span>
 <span></span>
 <span>  <span class="co"># --- SRS model-assisted ---</span></span>
 <span>  <span class="va">out_srs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/est_ma_srs.html">est_ma_srs</a></span><span class="op">(</span><span class="va">pop_sub</span>, Yhat <span class="op">=</span> <span class="va">pop_sub</span><span class="op">$</span><span class="va">Yhat</span>, S <span class="op">=</span> <span class="va">pop_sub</span><span class="op">$</span><span class="va">S</span><span class="op">)</span></span>
-<span>  <span class="va">out_srs</span><span class="op">$</span><span class="va">method</span> <span class="op">&lt;-</span> <span class="st">"SRS"</span></span>
 <span></span>
 <span>  <span class="co"># --- Proportional stratified ---</span></span>
 <span>  <span class="va">pop</span><span class="op">$</span><span class="va">S</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/generate_sample_index.html">generate_sample_index</a></span><span class="op">(</span><span class="va">pop</span>, <span class="va">n_code</span>, Z <span class="op">=</span> <span class="st">"Z"</span>, strata <span class="op">=</span> <span class="st">"strata"</span><span class="op">)</span></span>
 <span>  <span class="va">out_strat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/est_ma_strat.html">est_ma_strat</a></span><span class="op">(</span><span class="va">pop</span>, Yhat <span class="op">=</span> <span class="st">"Yhat"</span>, S <span class="op">=</span> <span class="st">"S"</span>,</span>
 <span>                             Z <span class="op">=</span> <span class="st">"Z"</span>, strata <span class="op">=</span> <span class="st">"strata"</span><span class="op">)</span></span>
-<span>  <span class="va">out_strat</span><span class="op">$</span><span class="va">method</span> <span class="op">&lt;-</span> <span class="st">"Stratified"</span></span>
 <span></span>
 <span>  <span class="co"># --- Optimal stratified ---</span></span>
 <span>  <span class="va">pop_opt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/calc_optimal_allocation_oracle.html">calc_optimal_allocation_oracle</a></span><span class="op">(</span><span class="va">pop</span>, <span class="va">n_code</span>,</span>
 <span>                                             strata <span class="op">=</span> <span class="st">"strata"</span>, Z <span class="op">=</span> <span class="st">"Z"</span><span class="op">)</span></span>
 <span>  <span class="va">out_opt</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/est_ma_strat.html">est_ma_strat</a></span><span class="op">(</span><span class="va">pop_opt</span>, Yhat <span class="op">=</span> <span class="st">"Yhat"</span>, S <span class="op">=</span> <span class="st">"S"</span>,</span>
 <span>                           Z <span class="op">=</span> <span class="st">"Z"</span>, strata <span class="op">=</span> <span class="st">"strata"</span><span class="op">)</span></span>
-<span>  <span class="va">out_opt</span><span class="op">$</span><span class="va">method</span> <span class="op">&lt;-</span> <span class="st">"Stratified-Opt"</span></span>
 <span></span>
-<span>  <span class="fu">bind_rows</span><span class="op">(</span><span class="va">out_subset</span>, <span class="va">out_srs</span>, <span class="va">out_strat</span>, <span class="va">out_opt</span><span class="op">)</span></span>
+<span>  <span class="fu">bind_rows</span><span class="op">(</span> Subset <span class="op">=</span> <span class="va">out_subset</span>, </span>
+<span>             SRS <span class="op">=</span> <span class="va">out_srs</span>, </span>
+<span>             Stratified <span class="op">=</span> <span class="va">out_strat</span>, </span>
+<span>             `Stratified-Opt` <span class="op">=</span> <span class="va">out_opt</span>, .id <span class="op">=</span> <span class="st">"method"</span> <span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p>Now run 200 iterations and summarize:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
@@ -409,10 +408,10 @@ Neyman (optimal) allocation.</li>
 <span>  <span class="va">out</span> <span class="op">&lt;-</span> <span class="fu">one_iter</span><span class="op">(</span><span class="va">pop</span>, <span class="va">n_code</span><span class="op">)</span></span>
 <span>  <span class="va">out</span><span class="op">$</span><span class="va">iter</span> <span class="op">&lt;-</span> <span class="va">i</span></span>
 <span>  <span class="va">out</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Summarize</span></span>
-<span><span class="va">sim_summary</span> <span class="op">&lt;-</span> <span class="va">results</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>Then summarize the results:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">sim_summary</span> <span class="op">&lt;-</span> <span class="va">results</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">group_by</span><span class="op">(</span><span class="va">method</span><span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">summarise</span><span class="op">(</span></span>
 <span>    mean_est <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="va">est</span><span class="op">)</span>,</span>
@@ -432,22 +431,12 @@ Neyman (optimal) allocation.</li>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> Stratified        0.414 -<span style="color: #BB0000;">0.086</span><span style="color: #BB0000; text-decoration: underline;">3</span>        0.139      0.198 0.163</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> SRS               0.422 -<span style="color: #BB0000;">0.077</span><span style="color: #BB0000; text-decoration: underline;">8</span>        0.227      0.254 0.239</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span> Subset            0.427 -<span style="color: #BB0000;">0.073</span><span style="color: #BB0000; text-decoration: underline;">2</span>        0.404      0.418 0.410</span></span></code></pre></div>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">ggplot</span><span class="op">(</span><span class="va">results</span>, <span class="fu">aes</span><span class="op">(</span>x <span class="op">=</span> <span class="va">method</span>, y <span class="op">=</span> <span class="va">est</span>, fill <span class="op">=</span> <span class="va">method</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">geom_boxplot</span><span class="op">(</span>alpha <span class="op">=</span> <span class="fl">0.7</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">geom_hline</span><span class="op">(</span>yintercept <span class="op">=</span> <span class="fl">0.5</span>, linetype <span class="op">=</span> <span class="fl">2</span>, color <span class="op">=</span> <span class="st">"red"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">labs</span><span class="op">(</span>title <span class="op">=</span> <span class="st">"Sampling distribution of ATE estimates (200 iterations)"</span>,</span>
-<span>       subtitle <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"True tau = 0.5, N = 2000, n_code = "</span>, <span class="va">n_code</span><span class="op">)</span>,</span>
-<span>       x <span class="op">=</span> <span class="st">"Estimator"</span>, y <span class="op">=</span> <span class="st">"Estimated ATE"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">theme</span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="simulation_framework_files/figure-html/unnamed-chunk-10-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
-</div>
-<div class="section level2">
-<h2 id="varying-simulation-factors">Varying simulation factors<a class="anchor" aria-label="anchor" href="#varying-simulation-factors"></a>
-</h2>
-<p>To understand how different factors affect estimator performance, you
-can loop over a grid of DGP settings. Here is an example that varies
-<code>R2_target</code> and <code>bias</code>:</p>
+<div class="section level3">
+<h3 id="a-quick-multifactor-simulation">A quick multifactor simulation<a class="anchor" aria-label="anchor" href="#a-quick-multifactor-simulation"></a>
+</h3>
+<p>To understand how different factors affect estimator performance,
+loop over a grid of DGP settings. Here we vary <code>R2_target</code>
+and <code>bias</code>:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">grid</span> <span class="op">&lt;-</span> <span class="fu">expand_grid</span><span class="op">(</span></span>
 <span>  R2 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.3</span>, <span class="fl">0.6</span>, <span class="fl">0.9</span><span class="op">)</span>,</span>
@@ -469,56 +458,30 @@ can loop over a grid of DGP settings. Here is an example that varies
 <span>    <span class="va">out</span><span class="op">$</span><span class="va">iter</span> <span class="op">&lt;-</span> <span class="va">i</span></span>
 <span>    <span class="va">out</span></span>
 <span>  <span class="op">}</span><span class="op">)</span></span>
-<span><span class="op">}</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Summarize by factor combination</span></span>
-<span><span class="va">factor_summary</span> <span class="op">&lt;-</span> <span class="va">grid_results</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
+<span><span class="op">}</span><span class="op">)</span></span></code></pre></div>
+<p>Results in hand, summarize by factor combination</p>
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">factor_summary</span> <span class="op">&lt;-</span> <span class="va">grid_results</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">group_by</span><span class="op">(</span><span class="va">R2</span>, <span class="va">bias_level</span>, <span class="va">method</span><span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">summarise</span><span class="op">(</span>RMSE <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="op">(</span><span class="va">est</span> <span class="op">-</span> <span class="fl">0.5</span><span class="op">)</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>            .groups <span class="op">=</span> <span class="st">"drop"</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<p>Then simply plot the results:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">factor_summary</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
 <span>  <span class="fu">mutate</span><span class="op">(</span>bias_level <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">bias_level</span>,</span>
 <span>                              levels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"none"</span>, <span class="st">"moderate"</span>, <span class="st">"large"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op"><a href="../reference/pipe.html">%&gt;%</a></span></span>
-<span>  <span class="fu">ggplot</span><span class="op">(</span><span class="fu">aes</span><span class="op">(</span>x <span class="op">=</span> <span class="va">method</span>, y <span class="op">=</span> <span class="va">RMSE</span>, fill <span class="op">=</span> <span class="va">method</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">geom_col</span><span class="op">(</span>alpha <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu">facet_grid</span><span class="op">(</span><span class="va">R2</span> <span class="op">~</span> <span class="va">bias_level</span>,</span>
+<span>  <span class="fu">ggplot</span><span class="op">(</span><span class="fu">aes</span><span class="op">(</span>x <span class="op">=</span> <span class="va">R2</span>, y <span class="op">=</span> <span class="va">RMSE</span>, color <span class="op">=</span> <span class="va">method</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">geom_line</span><span class="op">(</span>alpha <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">geom_jitter</span><span class="op">(</span> width <span class="op">=</span> <span class="fl">0.02</span>, height <span class="op">=</span> <span class="fl">0</span> <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">facet_wrap</span><span class="op">(</span> <span class="op">~</span> <span class="va">bias_level</span>,</span>
 <span>             labeller <span class="op">=</span> <span class="fu">labeller</span><span class="op">(</span>R2 <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"R2 = "</span>, <span class="va">x</span><span class="op">)</span>,</span>
 <span>                                  bias_level <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"Bias: "</span>, <span class="va">x</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">labs</span><span class="op">(</span>title <span class="op">=</span> <span class="st">"RMSE across simulation factors"</span>,</span>
-<span>       x <span class="op">=</span> <span class="cn">NULL</span>, y <span class="op">=</span> <span class="st">"RMSE"</span><span class="op">)</span> <span class="op">+</span></span>
+<span>       x <span class="op">=</span> <span class="st">"R2"</span>, y <span class="op">=</span> <span class="st">"RMSE"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">theme</span><span class="op">(</span>axis.text.x <span class="op">=</span> <span class="fu">element_text</span><span class="op">(</span>angle <span class="op">=</span> <span class="fl">45</span>, hjust <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
-<span>        legend.position <span class="op">=</span> <span class="st">"none"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="simulation_framework_files/figure-html/unnamed-chunk-12-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
+<span>        legend.position <span class="op">=</span> <span class="st">"bottom"</span><span class="op">)</span></span></code></pre></div>
+<p><img src="simulation_framework_files/figure-html/unnamed-chunk-13-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
 </div>
-<div class="section level2">
-<h2 id="key-takeaways">Key takeaways<a class="anchor" aria-label="anchor" href="#key-takeaways"></a>
-</h2>
-<p>The simulation framework supports systematic investigation of several
-design questions:</p>
-<ul>
-<li>
-<strong>Stratified sampling consistently reduces RMSE</strong>
-relative to SRS when the surrogate predictions have heterogeneous
-residual variance across strata.</li>
-<li>
-<strong>The advantage of stratification grows with
-R-squared</strong>: when the surrogate is more accurate, strata capture
-more meaningful variation, and stratified sampling provides greater
-efficiency gains.</li>
-<li>
-<strong>Optimal (Neyman) allocation</strong> offers further
-improvements over proportional allocation, especially under extreme
-variance heterogeneity. However, it requires knowledge of within-stratum
-residual variances, which may not be available before coding.</li>
-<li>
-<strong>Bias in the surrogate</strong> does not substantially affect
-the stratified model-assisted estimator because the bias correction step
-adjusts for stratum-level prediction errors.</li>
-</ul>
-<p>For more on evaluating stratification candidates and comparing oracle
-vs. pre-coding metrics, see
-<code><a href="../articles/applied_analysis.html">vignette("applied_analysis")</a></code>.</p>
 </div>
   </div>
 

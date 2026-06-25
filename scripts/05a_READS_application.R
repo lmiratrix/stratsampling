@@ -27,13 +27,14 @@ avg_stats = stats %>%
              sd_bar_Yhat=sqrt(weighted.mean(sd_Yhat^2,w=n)))
 
 
-
+dat$Yobs_raw=dat$score
+dat$Yhat_raw=dat$LLM_score
 dat$score=dat$score/avg_stats$sd_bar_Y
 dat$LLM_score=dat$LLM_score/avg_stats$sd_bar_Yhat
 
 dat <- dat %>% 
   select(text, score, LLM_score, LLM_confidence, more, 
-         s_id, t_id, sch_id) %>%
+         s_id, t_id, sch_id, Yobs_raw,Yhat_raw) %>%
   rename(Yobs = score, 
          Yhat = LLM_score, 
          ehat=LLM_confidence,
@@ -47,9 +48,14 @@ cat("Treatment:", sum(dat$Z), "Control:", sum(1-dat$Z), "\n")
 cat("Mean outcome - Treatment:", mean(dat$Yobs[dat$Z==1]), "\n")
 cat("Mean outcome - Control:", mean(dat$Yobs[dat$Z==0]), "\n")
 
-# Overall R²
-overall_r2 <- cor(dat$Yobs, dat$Yhat)^2
-cat("Overall R² between human and LLM scores:", round(overall_r2, 3), "\n")
+# Overall Correlation and R²
+overall_r = cor(dat$Yobs, dat$Yhat)
+overall_r2 = cor(dat$Yobs, dat$Yhat)^2
+SE_r = sqrt((1-overall_r^2)/(nrow(dat)-2))
+
+cat(sprintf("Correlation: %.3f (SE=%.3f)\nOverall R² between human and LLM scores: %.3f\n", overall_r, SE_r, overall_r2))
+
+
 
 # By treatment group
 r2_by_treatment <- dat %>%
@@ -57,7 +63,9 @@ r2_by_treatment <- dat %>%
   summarise(
     R2 = cor(Yobs, Yhat)^2,
     cor = cor(Yobs, Yhat),
-    N = n()
+    N = n(),
+    SE_cor = round(sqrt((1-cor^2)/(N-2)),2)
+    
   )
 print(r2_by_treatment)
 
@@ -186,8 +194,9 @@ gridExtra::grid.arrange(p_length, p_pred, nrow = 2)
 # -----------------------------------------------------------------------------
 library(stratsampling)
 
+
 # Create candidate stratifications
-candidates <- create_stratification_candidates(dat, vars = c("Yhat", "ehat", "word_count"),Z="Z")
+candidates <- create_stratification_candidates(dat, vars = c("Yhat",  "ehat", "word_count"),Z="Z")
 
 # Evaluate all candidates
 comparison_oracle <- compare_stratifications(dat, candidates, min_var_threshold = 0.01) # comparison using residuals (not feasible in practice)
@@ -224,9 +233,7 @@ print(oracle_vs_precoding$scatter_plot)
 ggsave("figures/READS_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
 
 
-# Remove one candidate with only 1 unit per stratum
 
-candidates = candidates[-c(which(names(candidates)=="Yhat_ehat_3x3"))]
 # Compare variance decomposition oracle vs. precoding
 results <- compare_decomposition_oracle(dat, candidates, n_code = floor(0.3*nrow(dat)),Z="Z")
 results$summary  # View table
@@ -238,9 +245,9 @@ ggsave("figures/READS_precoding_strat_variance-reduction.pdf",reads_decomp,  wid
 
 ## Select Final Stratification
 # Apply best stratification
-strat_name="Yhat_quartiles"
+strat_name="Yhat_quintiles"
 dat$strata <- candidates[[strat_name]] # choose one that doesn't use residuals (oracle)
-
+dat$strata = factor(dat$strata, labels=c("0-1","2","3","4","5-7"))
 plot_strata_residuals(dat, dat$strata)
 
 compute_variance_decomposition(dat, strata=dat$strata)
@@ -266,19 +273,19 @@ strata_table <- dat %>%
     `Mean Resid.` = sprintf("%.2f", mean_resid),
     `Var(Resid.)` = sprintf("%.2f", var_resid),
   ) %>%
-  select( Z,k, `Predicted Quality`,  N_zk, `Mean Yhat`, 
+  select( Z,k, `Predicted Quality`,  N_zk,
           `Mean Resid.`, `Var(Resid.)`) %>%
   rename( `$Z$`      = Z,
           `$k$`      = k,
           `$N_{zk}$` = N_zk,
-          `Mean $\\hat{Y}$` = `Mean Yhat`
+          `$\\hat{Y}$` = `Predicted Quality`
   )
 
 print(strata_table)
 
 kbl(strata_table, format = "latex", booktabs = TRUE,  
-    caption = "Characteristics of final stratification for the MORE study determined by LLM-generated quality score (quartiles).",
-    label="reads_strat_v2",linesep=c("", "","",  "\\addlinespace"),escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
+    caption = "Characteristics of final stratification for the MORE study determined by LLM-generated quality score (quintiles).",
+    label="reads_strat_v2",linesep=c("", "","", "", "\\addlinespace"),escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
   write_file("tables/READS_empirical_strata_characteristics_v2.tex")
 
 
@@ -319,7 +326,7 @@ ggsave("figures/READS_emp_single_forest.pdf",forest_plot,  width = 8, height = 6
 # Multiple samples to show variability
 
 multi_estimates <- compute_multiple_sample_estimates(dat, coding_fraction = 0.30, 
-                                                     n_samples = 20, seed = 2025, finite_pop=F)
+                                                     n_samples = 20, seed = 2026, finite_pop=F)
 multi_summary <- create_multi_sample_summary(multi_estimates)
 print(multi_summary)
 
@@ -329,7 +336,11 @@ print(forest_multi)
 ggsave("figures/READS_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
 
 
+scatter=oracle_vs_precoding$scatter_plot
 
+reads_figs=list(decomp=reads_decomp, forest_multi=forest_multi, forest_plot=forest_plot, scatter=scatter)
+names(reads_figs)=paste0("reads_",names(reads_figs))
+save(reads_figs,file="results/reads_figs.RData")
 
 # -----------------------------------------------------------------------------
 # Power analysis based on READS data ----
@@ -342,7 +353,7 @@ R2s
 # Overall explanatory power within strata
 1 - (1-R2s$R2_strat)*(1-R2s$R2_ML)
 sd( dat$Yobs[dat$Z==0] )
-sqrt( pp ) * sd( dat$Yobs[dat$Z==0] )
+#sqrt( pp ) * sd( dat$Yobs[dat$Z==0] )
 
 target_MDES = 0.15
 pp <- plot_power_curve( nrow(dat), mean(dat$Z), 1,
@@ -374,9 +385,6 @@ mm <- multi_estimates %>%
   mutate( pow_calc = c( NA, NA, ff$SE[[1]], NA, ff$SE[[2]] ) * sd( dat$Yobs[dat$Z==0] ),
           ratio = mean_SE / pow_calc )
 mm
-
-# They are not as close as expected.  This could be due to
-# heteroskedasticity within strata or other factors.
 
 
 

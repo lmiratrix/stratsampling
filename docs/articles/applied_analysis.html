@@ -49,13 +49,13 @@
   </a>
   <ul class="dropdown-menu" role="menu">
 <li>
-      <a href="../articles/applied_analysis.html">Applied Analysis: Evaluating and Selecting Stratifications</a>
-    </li>
-    <li>
       <a href="../articles/package_overview.html">Getting Started with stratsampling</a>
     </li>
     <li>
       <a href="../articles/simulation_framework.html">Simulation Framework</a>
+    </li>
+    <li>
+      <a href="../articles/applied_analysis.html">Applied Analysis: Evaluating and Selecting Stratifications</a>
     </li>
   </ul>
 </li>
@@ -94,32 +94,29 @@ Stratifications</h1>
 <div class="section level2">
 <h2 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h2>
-<p>A central decision in any stratified sampling design is how to define
-the strata. The <code>stratsampling</code> package provides two
-complementary evaluation frameworks:</p>
+<p>The main design choice in stratified sampling is how to define the
+strata. The goal is to group units so that surrogate errors are more
+similar within strata than across strata. Two diagnostics are
+useful:</p>
 <ol style="list-style-type: decimal">
 <li>
-<strong>Pre-coding evaluation</strong>: Ranks candidate
+<strong>Pre-coding evaluation</strong>: Rank candidate
 stratifications using proxy metrics that are available <em>before</em>
-any human coding takes place. This is the practical evaluation a
-researcher would use when designing a study.</li>
+any human coding takes place. This is the version a researcher can use
+when designing a study.</li>
 <li>
-<strong>Oracle evaluation</strong>: Computes the true variance
-reduction achieved by each stratification using the full set of coded
-outcomes. This serves as a benchmark for assessing how well the
-pre-coding proxies identify good stratifications.</li>
+<strong>Oracle evaluation</strong>: Compute the variance reduction
+achieved by candidate stratifications when all outcomes are known. This
+is mainly a benchmark for simulations, retrospective analyses, and
+method checks.</li>
 </ol>
 <p>This vignette walks through both approaches using simulated data
 where the ground truth is known, and then shows how to apply the
 pre-coding evaluation to real study design.</p>
-</div>
-<div class="section level2">
-<h2 id="setup-simulated-data-with-known-ground-truth">Setup: Simulated data with known ground truth<a class="anchor" aria-label="anchor" href="#setup-simulated-data-with-known-ground-truth"></a>
-</h2>
-<p>We generate a population where the surrogate has moderate bias and
-heterogeneous residual variance. Since this is simulated data, we have
-access to the true outcomes for all units, which enables oracle
-evaluation:</p>
+<p>To illustrate all of this, we generate a population where the
+surrogate has moderate bias and heterogeneous residual variance. Since
+this is simulated data, we have access to the true outcomes for all
+units, which enables oracle evaluation:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span> <span class="fl">101</span> <span class="op">)</span></span>
 <span><span class="va">dat</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/generate_population.html">generate_population</a></span><span class="op">(</span>N <span class="op">=</span> <span class="fl">2000</span>, n_strat <span class="op">=</span> <span class="fl">5</span>, tau <span class="op">=</span> <span class="fl">0.5</span>,</span>
@@ -127,6 +124,9 @@ evaluation:</p>
 <span>                           residual_var <span class="op">=</span> <span class="st">"heterogeneous"</span>,</span>
 <span>                           R2_target <span class="op">=</span> <span class="fl">0.7</span>,</span>
 <span>                           strata_config <span class="op">=</span> <span class="st">"balanced-approx"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># Make useless covariate for illustration</span></span>
+<span><span class="va">dat</span><span class="op">$</span><span class="va">X</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span> <span class="va">dat</span> <span class="op">)</span> <span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Compute residuals (needed for oracle evaluation functions)</span></span>
 <span><span class="va">dat</span><span class="op">$</span><span class="va">resid</span> <span class="op">&lt;-</span> <span class="va">dat</span><span class="op">$</span><span class="va">Yobs</span> <span class="op">-</span> <span class="va">dat</span><span class="op">$</span><span class="va">Yhat</span></span></code></pre></div>
@@ -139,18 +139,16 @@ generates a library of stratifications from all combinations of the
 specified variables and a range of strata counts:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">candidates</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/create_stratification_candidates.html">create_stratification_candidates</a></span><span class="op">(</span> <span class="va">dat</span>,</span>
-<span>                                                vars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Yhat"</span><span class="op">)</span>,</span>
+<span>                                                vars <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Yhat"</span>, <span class="st">"X"</span><span class="op">)</span>,</span>
 <span>                                                Z <span class="op">=</span> <span class="st">"Z"</span> <span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span> <span class="va">candidates</span> <span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "Yhat_tertiles"  "Yhat_quartiles" "Yhat_quintiles"</span></span></code></pre></div>
+<span><span class="co">#&gt;  [1] "Yhat_tertiles"  "Yhat_quartiles" "Yhat_quintiles" "X_tertiles"    </span></span>
+<span><span class="co">#&gt;  [5] "X_quartiles"    "X_quintiles"    "Yhat_X_2x2"     "Yhat_X_2x3"    </span></span>
+<span><span class="co">#&gt;  [9] "Yhat_X_3x2"     "Yhat_X_3x3"</span></span></code></pre></div>
 <p>Each candidate is a factor vector that assigns every observation to a
 stratum. Candidates are named by the variables and number of strata used
 to construct them (e.g., <code>Yhat_terciles</code>,
 <code>Yhat_quintiles</code>).</p>
-<p>For a richer set of candidates, you can include additional covariates
-or interaction terms. With the simulated data, we only have
-<code>Yhat</code> available as a stratification variable, but the same
-approach extends to multiple covariates.</p>
 </div>
 <div class="section level2">
 <h2 id="pre-coding-evaluation">Pre-coding evaluation<a class="anchor" aria-label="anchor" href="#pre-coding-evaluation"></a>
@@ -163,12 +161,19 @@ proxy metrics based on the surrogate predictions alone:</p>
 <span>                                                      <span class="va">candidates</span>,</span>
 <span>                                                      Z <span class="op">=</span> <span class="st">"Z"</span> <span class="op">)</span></span>
 <span><span class="va">pre_comparison</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 9</span></span></span>
-<span><span class="co">#&gt;   stratification n_strata min_stratum_size max_stratum_size avg_size_ratio</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Yhat_quintiles        5              181              219           1.16</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> Yhat_quartiles        4              228              272           1.13</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> Yhat_tertiles         3              314              353           1.10</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 10 × 9</span></span></span>
+<span><span class="co">#&gt;    stratification n_strata min_stratum_size max_stratum_size avg_size_ratio</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> Yhat_quintiles        5              181              219           1.16</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> Yhat_quartiles        4              228              272           1.13</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> Yhat_X_3x2            6              144              182           1.24</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> Yhat_X_3x3            9               95              126           1.31</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> Yhat_tertiles         3              314              353           1.10</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> Yhat_X_2x3            6              147              185           1.20</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> Yhat_X_2x2            4              228              273           1.19</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> X_quartiles           4              240              260           1.08</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> X_quintiles           5              192              208           1.07</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> X_tertiles            3              326              341           1.04</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># ℹ 4 more variables: mean_spread &lt;dbl&gt;, avg_within_var_Yhat &lt;dbl&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   sd_within_var_Yhat &lt;dbl&gt;, total_var_Yhat &lt;dbl&gt;</span></span></span></code></pre></div>
 <p>The output includes the between-strata and within-strata variance of
@@ -184,126 +189,60 @@ possible in terms of surrogate predictions).</p>
 completed study), we can evaluate each candidate using the true
 residuals. The <code><a href="../reference/compare_stratifications.html">compare_stratifications()</a></code> function computes
 oracle metrics. It requires a <code>resid</code> column (Yobs - Yhat) in
-the data:</p>
+the data, and returns an overall table summarizing the strataficiations,
+and a list of detailed information.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">oracle_comparison</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compare_stratifications.html">compare_stratifications</a></span><span class="op">(</span> <span class="va">dat</span>,</span>
 <span>                                               <span class="va">candidates</span>,</span>
 <span>                                               Z <span class="op">=</span> <span class="st">"Z"</span> <span class="op">)</span></span>
-<span><span class="va">oracle_comparison</span></span>
-<span><span class="co">#&gt; $summary</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 11</span></span></span>
-<span><span class="co">#&gt;   stratification n_strata min_stratum_size max_stratum_size avg_size_ratio</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Yhat_quintiles        5              181              219           1.16</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> Yhat_quartiles        4              228              272           1.13</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> Yhat_tertiles         3              314              353           1.10</span></span>
+<span><span class="va">oracle_comparison</span><span class="op">$</span><span class="va">summary</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 10 × 11</span></span></span>
+<span><span class="co">#&gt;    stratification n_strata min_stratum_size max_stratum_size avg_size_ratio</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>            <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> Yhat_quintiles        5              181              219           1.16</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> Yhat_quartiles        4              228              272           1.13</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> Yhat_X_3x3            9               95              126           1.31</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> Yhat_X_3x2            6              144              182           1.24</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> Yhat_tertiles         3              314              353           1.10</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> Yhat_X_2x3            6              147              185           1.20</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> Yhat_X_2x2            4              228              273           1.19</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> X_quintiles           5              192              208           1.07</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> X_quartiles           4              240              260           1.08</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> X_tertiles            3              326              341           1.04</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># ℹ 6 more variables: mean_spread &lt;dbl&gt;, avg_within_var_resid &lt;dbl&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   sd_within_var_resid &lt;dbl&gt;, min_var_resid &lt;dbl&gt;, max_var_resid &lt;dbl&gt;,</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;">#   ratio_var_resid &lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details</span></span>
-<span><span class="co">#&gt; $details$Yhat_tertiles</span></span>
-<span><span class="co">#&gt; $details$Yhat_tertiles$strata_stats</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 6 × 6</span></span></span>
-<span><span class="co">#&gt;       Z strata_eval  N_zk mean_resid var_resid sd_resid</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;fct&gt;</span>       <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>     0 Low Yhat      353      0.722      1.51     1.23</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>     0 Med Yhat      326      0.188      2.07     1.44</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>     0 High Yhat     321     -<span style="color: #BB0000;">1.05</span>       2.83     1.68</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span>     1 Low Yhat      314      0.793      1.61     1.27</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span>     1 Med Yhat      340      0.191      2.00     1.41</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span>     1 High Yhat     346     -<span style="color: #BB0000;">0.914</span>      2.86     1.69</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_tertiles$heterogeneity</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 13</span></span></span>
-<span><span class="co">#&gt;       Z   N_z n_strata min_size max_size imbalance min_var max_var ratio_var</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>     0  <span style="text-decoration: underline;">1</span>000        3      321      353      1.10    1.51    2.83      1.87</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>     1  <span style="text-decoration: underline;">1</span>000        3      314      346      1.10    1.61    2.86      1.78</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 4 more variables: range_var &lt;dbl&gt;, avg_within_var &lt;dbl&gt;,</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;">#   sd_within_var &lt;dbl&gt;, var_mean_resid &lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_tertiles$stratification</span></span>
-<span><span class="co">#&gt; [1] "Yhat_tertiles"</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_quartiles</span></span>
-<span><span class="co">#&gt; $details$Yhat_quartiles$strata_stats</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 8 × 6</span></span></span>
-<span><span class="co">#&gt;       Z strata_eval    N_zk mean_resid var_resid sd_resid</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;fct&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>     0 Low Yhat        272     0.820       1.44     1.20</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>     0 Med-Low Yhat    243     0.424       1.66     1.29</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span>     0 Med-High Yhat   244    -<span style="color: #BB0000;">0.114</span>       2.25     1.50</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">4</span>     0 High Yhat       241    -<span style="color: #BB0000;">1.32</span>        2.79     1.67</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">5</span>     1 Low Yhat        228     0.900       1.33     1.15</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">6</span>     1 Med-Low Yhat    257     0.417       1.97     1.40</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">7</span>     1 Med-High Yhat   256    -<span style="color: #BB0000;">0.068</span><span style="color: #BB0000; text-decoration: underline;">3</span>      2.20     1.48</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">8</span>     1 High Yhat       259    -<span style="color: #BB0000;">1.15</span>        2.83     1.68</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_quartiles$heterogeneity</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 13</span></span></span>
-<span><span class="co">#&gt;       Z   N_z n_strata min_size max_size imbalance min_var max_var ratio_var</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>     0  <span style="text-decoration: underline;">1</span>000        4      241      272      1.13    1.44    2.79      1.94</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>     1  <span style="text-decoration: underline;">1</span>000        4      228      259      1.14    1.33    2.83      2.12</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 4 more variables: range_var &lt;dbl&gt;, avg_within_var &lt;dbl&gt;,</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;">#   sd_within_var &lt;dbl&gt;, var_mean_resid &lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_quartiles$stratification</span></span>
-<span><span class="co">#&gt; [1] "Yhat_quartiles"</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_quintiles</span></span>
-<span><span class="co">#&gt; $details$Yhat_quintiles$strata_stats</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 10 × 6</span></span></span>
-<span><span class="co">#&gt;        Z strata_eval     N_zk mean_resid var_resid sd_resid</span></span>
-<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;fct&gt;</span>          <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>      <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span>     0 Very Low Yhat    219      0.875      1.44     1.20</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span>     0 Low Yhat         195      0.595      1.40     1.18</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span>     0 Med Yhat         202      0.126      2.15     1.47</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span>     0 High Yhat        194     -<span style="color: #BB0000;">0.455</span>      2.40     1.55</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span>     0 Very High Yhat   190     -<span style="color: #BB0000;">1.40</span>       2.80     1.67</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span>     1 Very Low Yhat    181      1.00       1.19     1.09</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span>     1 Low Yhat         205      0.486      1.82     1.35</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span>     1 Med Yhat         198      0.176      2.09     1.44</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span>     1 High Yhat        206     -<span style="color: #BB0000;">0.208</span>      2.54     1.59</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span>     1 Very High Yhat   210     -<span style="color: #BB0000;">1.31</span>       2.61     1.61</span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_quintiles$heterogeneity</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 13</span></span></span>
-<span><span class="co">#&gt;       Z   N_z n_strata min_size max_size imbalance min_var max_var ratio_var</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;int&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span>     0  <span style="text-decoration: underline;">1</span>000        5      190      219      1.15    1.40    2.80      2.00</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span>     1  <span style="text-decoration: underline;">1</span>000        5      181      210      1.16    1.19    2.61      2.20</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 4 more variables: range_var &lt;dbl&gt;, avg_within_var &lt;dbl&gt;,</span></span></span>
-<span><span class="co">#&gt; <span style="color: #949494;">#   sd_within_var &lt;dbl&gt;, var_mean_resid &lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; $details$Yhat_quintiles$stratification</span></span>
-<span><span class="co">#&gt; [1] "Yhat_quintiles"</span></span></code></pre></div>
-<p>This shows the actual variance reduction achieved by each
-stratification. We can compare the pre-coding and oracle rankings to see
-how well the proxy metrics identify the best stratification:</p>
+<span><span class="co">#&gt; <span style="color: #949494;">#   ratio_var_resid &lt;dbl&gt;</span></span></span></code></pre></div>
+<p><code><a href="../reference/compare_stratifications.html">compare_stratifications()</a></code> shows the actual variance
+reduction achieved by each stratification. We can compare the pre-coding
+and oracle rankings to see how well the proxy metrics identify the best
+stratification:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">comparison</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compare_oracle_vs_precoding.html">compare_oracle_vs_precoding</a></span><span class="op">(</span> <span class="va">oracle_comparison</span>,</span>
 <span>                                            <span class="va">pre_comparison</span> <span class="op">)</span></span>
 <span><span class="va">comparison</span></span>
 <span><span class="co">#&gt; $combined_table</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 3 × 11</span></span></span>
-<span><span class="co">#&gt;   stratification n_strata oracle_mean_spread oracle_avg_within_var</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                 <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> Yhat_quintiles        5              0.629                  2.05</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> Yhat_quartiles        4              0.612                  2.06</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">3</span> Yhat_tertiles         3              0.524                  2.15</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 10 × 11</span></span></span>
+<span><span class="co">#&gt;    stratification n_strata oracle_mean_spread oracle_avg_within_var</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;chr&gt;</span>             <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>              <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>                 <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> Yhat_quintiles        5            0.629                    2.05</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> Yhat_quartiles        4            0.612                    2.06</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> Yhat_X_3x3            9            0.535                    2.15</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> Yhat_X_3x2            6            0.529                    2.15</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> Yhat_tertiles         3            0.524                    2.15</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> Yhat_X_2x3            6            0.433                    2.24</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> Yhat_X_2x2            4            0.428                    2.24</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> X_quintiles           5            0.004<span style="text-decoration: underline;">41</span>                  2.67</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> X_quartiles           4            0.002<span style="text-decoration: underline;">79</span>                  2.67</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> X_tertiles            3            0.001<span style="text-decoration: underline;">70</span>                  2.67</span></span>
 <span><span class="co">#&gt; <span style="color: #949494;"># ℹ 7 more variables: oracle_ratio_var &lt;dbl&gt;, oracle_rank &lt;int&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   precoding_mean_spread &lt;dbl&gt;, precoding_avg_within_var &lt;dbl&gt;,</span></span></span>
 <span><span class="co">#&gt; <span style="color: #949494;">#   precoding_rank &lt;int&gt;, rank_diff &lt;int&gt;, abs_rank_diff &lt;int&gt;</span></span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $rank_correlation</span></span>
-<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="co">#&gt; [1] 0.9757576</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $metric_correlation</span></span>
-<span><span class="co">#&gt; [1] 1</span></span>
+<span><span class="co">#&gt; [1] 0.9757576</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $scatter_plot</span></span></code></pre></div>
 <p><img src="applied_analysis_files/figure-html/unnamed-chunk-6-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
@@ -365,7 +304,10 @@ results side by side:</p>
 <span>                                             <span class="va">candidates</span>,</span>
 <span>                                             n_code <span class="op">=</span> <span class="fl">200</span>,</span>
 <span>                                             Z <span class="op">=</span> <span class="st">"Z"</span> <span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/plot_decomposition_comparison.html">plot_decomposition_comparison</a></span><span class="op">(</span> <span class="va">decomp_all</span> <span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/plot_decomposition_comparison.html">plot_decomposition_comparison</a></span><span class="op">(</span> <span class="va">decomp_all</span> <span class="op">)</span></span>
+<span><span class="co">#&gt; Warning in sqrt(BS_minus_WS): NaNs produced</span></span>
+<span><span class="co">#&gt; Warning: Removed 2 rows containing missing values or values outside the scale range</span></span>
+<span><span class="co">#&gt; (`geom_bar()`).</span></span></code></pre></div>
 <p><img src="applied_analysis_files/figure-html/unnamed-chunk-8-1.png" alt="" width="80%" style="display: block; margin: auto;"></p>
 <p>Stratifications with a larger green (between-strata) share are more
 effective at capturing heterogeneity.</p>
@@ -442,27 +384,21 @@ at the same rate):</p>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span>     1 Med Yhat         198        20             20</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span>     1 High Yhat        206        23             21</span></span>
 <span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span>     1 Very High Yhat   210        24             21</span></span></code></pre></div>
-<p>Under heterogeneous residual variance, optimal allocation can
-substantially reduce the variance of the stratified estimator. However,
-in practice, the within-stratum residual variances must be estimated
-from pilot data or prior knowledge, since they depend on the coded
-outcomes.</p>
+<p>Under heterogeneous residual variance, optimal allocation can reduce
+the variance of the stratified estimator. However, in practice, the
+within-stratum residual variances must be estimated from pilot data or
+prior knowledge.</p>
 </div>
 <div class="section level2">
 <h2 id="practical-recommendations">Practical recommendations<a class="anchor" aria-label="anchor" href="#practical-recommendations"></a>
 </h2>
-<p>Based on the evaluation framework, we offer several practical
-guidelines for researchers designing stratified sampling studies:</p>
+<p>Based on the evaluation framework, we offer some practical guidelines
+for selecting a stratification:</p>
 <ol style="list-style-type: decimal">
 <li><p><strong>Start with the surrogate as the primary stratification
 variable.</strong> The surrogate prediction (<code>Yhat</code>)
 typically captures the most relevant variation for reducing estimator
 variance.</p></li>
-<li><p><strong>Use the pre-coding comparison to select among
-candidates.</strong> The proxy metrics computed by
-<code><a href="../reference/compare_stratifications_precoding.html">compare_stratifications_precoding()</a></code> are generally reliable
-indicators of oracle performance, especially when the surrogate has good
-predictive accuracy.</p></li>
 <li><p><strong>Consider interaction stratifications</strong> when you
 have domain knowledge suggesting that specific covariates moderate
 surrogate accuracy. The <code><a href="../reference/make_interaction_strata.html">make_interaction_strata()</a></code> function

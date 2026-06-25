@@ -27,20 +27,16 @@ library(stratsampling)
 
 # Introduction
 
-The `stratsampling` package includes a flexible data-generating
-process (DGP) for running Monte Carlo simulations that compare
-stratified and simple random sampling designs. This vignette
-describes how to generate simulated populations, configure the key
-simulation factors, and run Monte Carlo experiments to
-evaluate estimator performance.
+The `stratsampling` package includes a data-generating process (DGP) for comparing stratified and simple random sampling designs.
+The examples below show how to generate simulated populations, vary the structure of surrogate prediction error, and run Monte Carlo experiments.
 
 
 # Generating a simulated population
 
-The `generate_population()` function creates a randomized experiment of $N$
-units with potential outcomes, treatment assignment, the observed outcome, and surrogate
-predictions. The surrogate predictions are constructed by adding
-stratum-specific bias and noise to the true outcomes, mimicing what a LLM would do.
+The `generate_population()` function creates a randomized experiment with $N$ units, potential outcomes, treatment assignment, observed outcomes, and surrogate predictions.
+The surrogate predictions are constructed by adding stratum-specific bias and noise to the true outcomes.
+This mimics the setting where an LLM or other automated system produces an outcome measure that is correlated with, but not identical to, the human-coded outcome.
+
 
 ```{r}
 set.seed( 42 )
