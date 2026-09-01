@@ -94,15 +94,70 @@ generate_surrogate_noise <- function( N,
 }
 
 
-#' Generate a population with strata and outcomes and
-#' surrogate/predicted outcomes that depend on strata.
+#' Generate a Simulated Population with Surrogate Scores
 #'
-#' These strata are generated post-treatment, in that we generate
-#' n_strat strata within the treated and control units separately, and
-#' then generate outcomes.
+#' Creates a simulated population with potential outcomes, treatment
+#' assignment, and surrogate predictions (Yhat) that exhibit
+#' configurable levels of bias and residual variance heterogeneity
+#' across strata. This is the primary data-generating function for
+#' simulation studies comparing stratified vs. SRS sampling designs.
 #'
-#' @param no_tx If TRUE, do not generate treatment assignment (Z) and
-#'   set all outcomes to control potential outcome.
+#' Strata are generated post-treatment: \code{n_strat} strata are
+#' created within treated and control units separately, and surrogate
+#' noise (bias + residual) is added within each stratum.
+#'
+#' @param N Integer. Total population size.
+#' @param n_strat Integer. Number of strata to create within each
+#'   treatment arm.
+#' @param strata_config Character. How to allocate units across
+#'   strata: \code{"balanced-exact"} (equal sizes, requires N
+#'   divisible by n_strat), \code{"balanced-approx"} (approximately
+#'   equal via random assignment), or \code{"unbalanced"} (random
+#'   proportions).
+#' @param tau Numeric. Constant additive treatment effect. Default is
+#'   0 (no treatment effect).
+#' @param bias Character. Level of systematic prediction bias across
+#'   strata: \code{"none"}, \code{"small"} (up to 25% of sd_y),
+#'   \code{"moderate"} (up to 50%), \code{"large"} (up to 100%), or
+#'   \code{"extreme-contrast"} (bias concentrated in two strata).
+#' @param residual_var Character. Pattern of residual variance across
+#'   strata: \code{"homogeneous"} (equal variance),
+#'   \code{"heterogeneous"} (linearly increasing), or
+#'   \code{"extreme-contrast"} (one very high, one very low).
+#' @param sd_y Numeric. Standard deviation of the outcome variable.
+#'   Default is 3.
+#' @param R2_target Numeric between 0 and 1. Target R-squared for the
+#'   surrogate predictions. Controls overall prediction quality.
+#'   Default is 0.5.
+#' @param no_tx Logical. If \code{TRUE}, do not generate treatment
+#'   assignment; all units receive control potential outcomes. Useful
+#'   for single-arm designs. Default is \code{FALSE}.
+#' @param rescale_v Logical. If \code{TRUE}, rescale residual
+#'   variances to preserve the target R-squared exactly. Default is
+#'   \code{TRUE}.
+#' @param seed Optional integer seed for reproducibility.
+#'
+#' @return A data frame with columns:
+#'   \describe{
+#'     \item{Z}{Treatment indicator (0 = control, 1 = treated)}
+#'     \item{strata}{Stratum assignment (integer 1 to n_strat)}
+#'     \item{ID}{Unique unit identifier}
+#'     \item{Y0}{Control potential outcome}
+#'     \item{Y1}{Treated potential outcome (Y0 + tau)}
+#'     \item{Yobs}{Observed outcome under assigned treatment}
+#'     \item{Yhat}{Surrogate prediction (Yobs + stratum-specific noise)}
+#'   }
+#'
+#' @seealso \code{\link{describe_population}} for summarizing the DGP,
+#'   \code{\link{generate_observed_sample}} for drawing a subsample.
+#'
+#' @examples
+#' dat <- generate_population(N = 400, n_strat = 4, tau = 0.5,
+#'                            bias = "moderate",
+#'                            residual_var = "heterogeneous",
+#'                            R2_target = 0.7, seed = 42)
+#' head(dat)
+#' table(dat$strata, dat$Z)
 #'
 #' @export
 generate_population <- function(N,
@@ -115,8 +170,7 @@ generate_population <- function(N,
                                 R2_target = 0.5,
                                 no_tx = FALSE,
                                 rescale_v = TRUE,
-                                seed=NULL,
-                                oracle = TRUE # what does this parameter do?
+                                seed=NULL
 ) {
     
     strata_config = match.arg(strata_config)
@@ -207,10 +261,30 @@ generate_strata_within_arm <- function(N_arm, n_strat, strata_config) {
 
 
 
-#' Describe the DGP population defined by set parameters
-#' 
-#' Utility function to explore the different simulation factors
-#' 
+#' Describe the Data-Generating Process Population
+#'
+#' Utility function to explore how different simulation factors (bias
+#' pattern, residual variance heterogeneity, R-squared) interact to
+#' produce the population-level properties of the surrogate
+#' predictions. Generates a large population (or accepts an existing
+#' data frame) and summarizes the variance of bias, average residual
+#' variance, proportion of error due to bias, and achieved R-squared.
+#'
+#' @param n_strat Integer specifying the number of strata, or a data
+#'   frame (output of \code{\link{generate_population}}) to summarize
+#'   directly.
+#' @inheritParams generate_population
+#' @param verbose Logical. If \code{TRUE}, prints formatted tables of
+#'   stratum-level and aggregate summaries. Default is \code{FALSE}.
+#'
+#' @return A one-row tibble with columns: \code{Z} (treatment arm),
+#'   \code{Var_b} (variance of stratum-level biases), \code{E_sig2}
+#'   (expected within-stratum residual variance), \code{prop_bias}
+#'   (proportion of prediction error due to bias), and \code{R2}
+#'   (achieved R-squared of surrogate predictions).
+#'
+#' @seealso \code{\link{generate_population}}
+#'
 #' @export
 describe_population <- function(n_strat,
                                 strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
@@ -263,93 +337,10 @@ describe_population <- function(n_strat,
     if ( verbose ) {
         print( knitr::kable( agg, digits = 3) )
     }
-    agg        
+    invisible( agg )
 }
 
 
 
 
 
-# Demo code ---- 
-
-if ( FALSE ) {
-    
-    library( tidyverse )
-    library(stratsampling)
-    
-    
-    # Generate data
-    dd <- generate_population(N=1000,
-                              n_strat=4,
-                              strata_config="unbalanced",
-                              tau=2,
-                              bias="large",
-                              residual_var="heterogeneous",
-                              sd_y=3,
-                              R2_target=0.8,
-                              no_tx=FALSE,
-                              seed=1234)
-    table( dd$strata, dd$Z )
-    
-    
-    # Illustrate describe_population
-    
-    describe_population(4, 
-                        bias = "extreme-contrast",
-                        residual_var = "extreme-contrast",
-                        rescale_v = TRUE )
-    describe_population(4, 
-                        bias = "extreme-contrast",
-                        residual_var = "extreme-contrast",
-                        rescale_v = FALSE )
-    
-    
-    # Call describe_population on all the values for the arguments
-    
-    grid <- expand_grid(
-        n_strat = 4,
-        strata_config = c("balanced-exact", "balanced-approx", "unbalanced"),
-        #strata_config = "balanced-exact",
-        tau = c(0),
-        bias = c( "none", "small", "moderate", "large", "extreme-contrast"),
-        residual_var = c("homogeneous", "heterogeneous", "extreme-contrast"),
-        sd_y = c(3),
-        R2_target = c(0.8),
-        rescale_v = TRUE
-    )
-    
-    
-  
-    
-    results <- grid %>%
-        rowwise() %>%
-        mutate( desc = list( describe_population( n_strat = n_strat,
-                                                  strata_config = strata_config,
-                                                  tau = tau,
-                                                  bias = bias,
-                                                  residual_var = residual_var,
-                                                  sd_y = sd_y,
-                                                  R2_target = R2_target,
-                                                  no_tx = FALSE,
-                                                  rescale_v = rescale_v,
-                                                  seed=1234,
-                                                  verbose = FALSE ) ) ) %>%
-        unnest( desc )
-    
-    results <- results %>%
-        dplyr::select( -Z, -n_strat, -tau, - sd_y, -R2_target ) %>% 
-        mutate(bias=fct_relevel( bias, "none"))
-    
-    results %>%
-        knitr::kable( digits=2 )
-    
-    ggplot( results, aes( bias, prop_bias, color = strata_config, 
-                          lty = rescale_v, group=interaction( strata_config, rescale_v) )) +
-        facet_wrap( ~ residual_var ) +
-        geom_point() + geom_line() +
-        theme_minimal() + 
-        coord_flip() +
-        scale_y_continuous( limits=c(0,1) )
-    
-    
-}

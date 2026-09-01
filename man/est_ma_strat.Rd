@@ -2,7 +2,7 @@
 % Please edit documentation in R/est_functions.R
 \name{est_ma_strat}
 \alias{est_ma_strat}
-\title{Calculate treatment impacts with stratified sample}
+\title{Model-Assisted Stratified Estimator}
 \usage{
 est_ma_strat(
   data = NULL,
@@ -15,26 +15,61 @@ est_ma_strat(
   finite_pop = FALSE
 )
 }
+\arguments{
+\item{data}{Data frame containing outcome, surrogate, sampling
+indicator, treatment, and stratification columns.}
+
+\item{Yhat}{Name of the surrogate score column. Default is \code{"Yhat"}.}
+
+\item{Yobs}{Name of the human-coded outcome column. Default is
+\code{"Yobs"}.}
+
+\item{S}{Name of the sampling indicator column (1 = coded, 0 = not
+coded). Default is \code{"S"}.}
+
+\item{Z}{Name of the treatment indicator column, or \code{NULL} for a
+population mean. Default is \code{"Z"}.}
+
+\item{strata}{Name of the stratification column, or \code{NULL} for
+unstratified (SRS) estimation. Default is \code{"strata"}.}
+
+\item{return_pieces}{Logical. If \code{TRUE}, returns a list with
+intermediate quantities useful for diagnostics. Default is \code{FALSE}.}
+
+\item{finite_pop}{Logical. If \code{TRUE}, applies finite population
+corrections and returns only the sampling variance component.
+Default is \code{FALSE}.}
+}
 \value{
-A data.frame with columns:
-\item{est}{the point estimate}
-\item{SE}{Not sure what this is.}
-\item{SEhat}{the estimated standard error of the estimator}
-\item{SEhat.full}{the estimated standard error component due to full coding variance
-(i.e., if we had coded everything)}
-\item{SEhat.samp}{the estimated standard error component due to sampling variance
-(i.e., due to only coding a subset of documents) HOW DIFFERENT FROM SEhat?}
-\item{S2.0}{the estimated population variance of the outcomes in the
-control group}
-\item{S2.1}{the estimated population variance of the outcomes in the
-treatment group}
+A data frame with columns:
+\describe{
+\item{est}{Point estimate of the treatment effect (or mean).}
+\item{SE}{Oracle SE computed using true residual variances for all
+units.}
+\item{SEhat}{Estimated SE from the coded subsample, combining both
+the full-coding and sampling variance components.}
+\item{SEhat.full}{Estimated SE component attributable to treatment
+effect variability (i.e., variance even if all units were coded).}
+\item{SEhat.samp}{Estimated SE component attributable to
+subsampling (i.e., additional variance from coding only a subset).}
+\item{S2.0, S2.1}{Estimated population variance of outcomes in
+control and treatment groups.}
+}
 }
 \description{
-Function to calculate the model-assisted treatment effect estimator
-assuming we have K fixed strata and hand-coded scores for a
-subsample of n<N documents chosen by stratified random sampling
-(with fixed and known sampling probabilities).
+Computes the model-assisted treatment effect estimator that combines
+surrogate predictions for the full population with a bias correction
+from a human-coded stratified subsample. Within each treatment arm
+and stratum, the estimator adjusts the population mean of surrogate
+scores by the average residual (human score minus surrogate) in the
+coded units, weighted by stratum sizes.
 }
 \details{
-If strata set to null, then do the SRS version.
+If \code{strata} is set to \code{NULL}, this reduces to the SRS model-assisted
+estimator (equivalent to calling \code{\link[=est_ma_srs]{est_ma_srs()}}).
+}
+\seealso{
+\code{\link[=est_ma_srs]{est_ma_srs()}} for the unstratified version,
+\code{\link[=est_subset]{est_subset()}} for the baseline estimator, and
+\code{\link[=generate_sample_index]{generate_sample_index()}} for drawing stratified samples.
 }

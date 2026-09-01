@@ -12,15 +12,27 @@ library(gt)
 # -------------------------------
 # 0) Load data and rebuild analysis_results
 # -------------------------------
-# Path to the CSV you uploaded
-results1=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_exact_strata.rds")
-results2=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_approx_strata.rds")
-results3=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_unbalanced_strata.rds")
+results1=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_exact_strata_all.rds")
+results2=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_approx_strata_all.rds")
+results3=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_unbalanced_strata_all.rds")
 
 results=rbind(results1,results2,results3)
 
-results$method[results$method=="Stratified-Opt"]="Optimal"
 
+
+method_levels <- c(
+    "Subset",
+    "SRS",
+    "Stratified",
+    "Stratified-Random",
+    "Optimal",
+    "Optimal-Permuted",
+    "Optimal-Random",
+    "Optimal-Reversed",
+    "Optimal-Pilot-Pooled",
+    "Optimal-Pilot-Ind",
+    "Full coding"
+)
 
 
 analysis_results <- results %>%
@@ -47,7 +59,7 @@ analysis_results <- results %>%
 analysis_results <- analysis_results %>%
     mutate(
         coding_frac   = n_code / N,
-        method        = fct_relevel(method, "Subset", "SRS", "Stratified", "Optimal"),
+        method        = factor(method, levels = intersect(method_levels, unique(method))),
         residual_var  = fct_relevel(factor(residual_var), "homogeneous", "heterogeneous", "extreme-contrast"),
         bias          = fct_relevel(factor(bias), "none", "small", "moderate", "large", "extreme-contrast") #,
         #strata_config = fct_relevel(factor(strata_config), "balanced-exact", "balanced-approx", "unbalanced")
@@ -129,12 +141,16 @@ ggsave("figures/fig1_frontier_lowR2.pdf",  fig1_low,  width = 8.5, height = 6.5)
 #    ∆(% variance reduction vs SRS) across budgets and moderators
 # -------------------------------
 
-fig2_high <- make_delta_plot(main, r2_val = 0.85, bias_vals=c("none","small", "moderate","large"))
-fig2_low  <- make_delta_plot(main, r2_val = 0.40, bias_vals=c("none","small", "moderate","large"))
+fig2_high <- make_delta_plot(main, r2_val = 0.85, bias_vals=c("none","small", "moderate","large"),methods=c("Stratified","Stratified-Random","Optimal","Optimal-Permuted"))
+fig2_low  <- make_delta_plot(main, r2_val = 0.40, bias_vals=c("none","small", "moderate","large"),methods=c("Stratified","Stratified-Random","Optimal","Optimal-Permuted"))
 
-ggsave("figures/fig2_delta_opt_over_strat_highR2.pdf", fig2_high, width = 7.2, height = 6.0)
-ggsave("figures/fig2_delta_opt_over_strat_lowR2.pdf",  fig2_low,  width = 7.2, height = 6.0)
+ggsave("figures/new-sims/fig2_delta_opt_over_strat_highR2.pdf", fig2_high, width = 7.2, height = 6.0)
+ggsave("figures/new-sims/fig2_delta_opt_over_strat_lowR2.pdf",  fig2_low,  width = 7.2, height = 6.0)
 
+
+
+
+make_delta_plot(main, r2_val = 0.85, bias_vals=c("none","small", "moderate","large"),methods=c("Stratified","Stratified-Random","Optimal","Optimal-Permuted","Optimal-Random"))
 
 # Make the same figure but collapse over levels of bias (any vs. none) and residual variance (hetero vs. homogeneous)
 d2 = results %>%
@@ -164,16 +180,28 @@ dat2 <- d2 %>%
 
 
 base2 <- dat2 %>%
-    filter(method %in% c("Stratified","Optimal")) %>%
+    #filter(method %in% c("Stratified","Optimal")) %>%
     select(all_of(cell_keys), method, pct_var_red_vs_SRS) %>%
     mutate(bias = factor(bias, levels=c(0,1), labels=c("No Bias", "Biased")),
            residual_var=factor(residual_var, levels=c(0,1), labels=c("Homogenous Var.", "Heterogeneous Var.")))
 
-fig2b=make_delta_plot(base2, facet=as.formula("R2_target ~ bias+residual_var")) + theme(panel.grid.minor = element_blank(), 
-                                                                                        strip.text = element_text(size = 11),
-                                                                                        legend.text = element_text(size=10))
+fig2b=make_delta_plot(base2, facet=as.formula("R2_target ~ bias+residual_var")) + 
+  theme(panel.grid.minor = element_blank(), strip.text = element_text(size = 11), legend.text = element_text(size=10))+
+    scale_y_continuous(breaks = seq(-10, 100, by = 20),oob=scales::squish,
+                       labels = percent_format(scale = 1),limits = c(-10, 85))
+
 print(fig2b)
 ggsave("figures/fig2b_delta_opt_over_strat.pdf", fig2b, width = 8.5, height = 6.5)
+
+
+fig2b.new=make_delta_plot(base2, facet=as.formula("R2_target ~ bias+residual_var"),
+                methods=c("Stratified","Stratified-Random", "Optimal","Optimal-Random","Optimal-Reversed"))+ 
+  scale_y_continuous(breaks=seq(-80,80,by=20), limits=c(-80,80),oob=scales::oob_squish)+
+  theme(panel.grid.minor = element_blank(), strip.text = element_text(size = 11), legend.text = element_text(size=10))
+
+
+print(fig2b.new)
+ggsave("figures/new-sims/fig2b_delta_opt_over_strat.pdf", fig2b.new, width = 8.5, height = 6.5)
 
 
 
@@ -250,4 +278,11 @@ print(fig5b)
 ggsave("figures/fig5_VR_aggregated.pdf", fig5b, width = 8.5, height = 6.5)
 
 
+fig5b.new<- make_full_ratio_plot(res,facet=as.formula(R2_target~any_bias+any_hetero),
+                                 methods=c("SRS","Stratified","Optimal","Optimal-Permuted"))+ theme(panel.grid.minor = element_blank())+
+  scale_y_continuous(breaks=seq(1,6,by=1),limits=c(0.9,7), oob=scales::oob_squish)+   
+  theme(panel.grid.minor = element_blank(), strip.text = element_text(size = 11),legend.text = element_text(size=10))
 
+print(fig5b.new)
+
+ggsave("figures/new-sims/fig5_VR_aggregated_with_wrong_optimal.pdf", fig5b.new, width = 8.5, height = 6.5)

@@ -2,20 +2,35 @@
 % Please edit documentation in R/sampling_functions.R
 \name{calc_sampling_weights}
 \alias{calc_sampling_weights}
-\title{Given a sampling indicator and stratification, calculate the
-associated sampling weights.}
+\title{Calculate Sampling Weights from a Stratified Sample}
 \usage{
 calc_sampling_weights(dat, Z = NULL, S = "S", strata = NULL)
 }
 \arguments{
-\item{S}{Name of column in dat that is the sampling indicator
-(0/1).  Or vector of values.}
+\item{dat}{Data frame containing the population.}
+
+\item{Z}{Character string naming the treatment indicator column, or
+\code{NULL} to ignore treatment. Default is \code{NULL}.}
+
+\item{S}{Character string naming the sampling indicator column
+(values 0/1), or a numeric vector of indicators. Default is
+\code{"S"}.}
+
+\item{strata}{Character string naming the stratification column, or
+\code{NULL} for unstratified weights. Default is \code{NULL}.}
 }
 \value{
-Vector of sampling probabilities (weights) for each unit in
-dat.
+Numeric vector of sampling probabilities (one per row of
+\code{dat}), where each value equals n_k / N_k for the unit's
+stratum.
 }
 \description{
-Given a sampling indicator and stratification, calculate the
-associated sampling weights.
+Given a data frame with a sampling indicator and (optional)
+stratification, computes the inclusion probability for each unit as
+the proportion sampled within its stratum (and treatment arm, if
+specified).
+}
+\seealso{
+\code{\link{generate_sample_index}},
+\code{\link{est_ma_strat}}
 }

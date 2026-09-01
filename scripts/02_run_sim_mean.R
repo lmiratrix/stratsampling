@@ -24,7 +24,7 @@ library(stratsampling)
 source("scripts/sim_functions.R")
 
 
-one_iter = function(params) {
+one_iter = function(params, pilot_frac=NULL) {
     dat = generate_population(N=params$N, n_strat=params$n_strat,
                               strata_config=params$strata_config,
                               tau=params$tau,
@@ -35,7 +35,7 @@ one_iter = function(params) {
     
     n_code = round(params$N * params$coding_budget)
     
-    res <- one_iter_all(dat, n_code,Z=NULL) %>%
+    res <- one_iter_all(dat, n_code,Z=NULL, include_rand=T, pilot_frac=pilot_frac) %>%
         mutate(N=params$N,
                n_code = n_code,
                n_strat=params$n_strat,
@@ -56,6 +56,9 @@ if ( FALSE ) {
     # Test one_iter()
     params = param_grid[1,]
     one_iter( params )
+    
+    one_iter(params, pilot_frac=0.4)
+    
 }
 
 
@@ -73,21 +76,16 @@ n_iter=1000
 set.seed(1234)
 
 system.time(
-    results <- foreach(i=1:nrow(param_grid), .combine = 'rbind', .packages = c("dplyr","stratsampling")) %dorng% {
-        params <- param_grid[i,]
-        res <- plyr::rdply(n_iter, one_iter(params))  # Run 1000 iterations
-        return(res)
+    results <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling")) %dorng% {
+        plyr::rdply(n_iter, one_iter(param_grid[i,]))  # Run 1000 iterations
     }
 )
 
+results = dplyr::bind_rows(results)
 saveRDS(results,file="results/sim_results_mean_only.rds")
 
 
 
-
-
-
-results$method[results$method=="Stratified-Opt"]="Optimal"
 
 
 
@@ -112,10 +110,24 @@ analysis_results <- results %>%
         .groups = "drop"
     )
 
+method_levels <- c(
+    "Subset",
+    "SRS",
+    "Stratified",
+    "Stratified-Random",
+    "Optimal",
+    "Optimal-Permuted",
+    "Optimal-Random",
+    "Optimal-Reversed",
+    "Optimal-Pilot-Pooled",
+    "Optimal-Pilot-Ind",
+    "Full coding"
+)
+
+
 analysis_results <- analysis_results %>%
     mutate(
-        method        = fct_relevel(method, "Subset", "SRS", 
-                                    "Stratified", "Optimal"),
+        method        = factor(method, levels=method_levels),
         residual_var  = fct_relevel(factor(residual_var), "homogeneous",
                                     "heterogeneous", "extreme-contrast"),
         bias          = fct_relevel(factor(bias), "none", "small", "moderate",
@@ -126,3 +138,7 @@ source("scripts/plotting_functions.R")
 
 make_frontier_plot(analysis_results, r2_val = 0.85)
 make_frontier_plot(analysis_results, r2_val=0.4)
+
+
+make_frontier_plot(analysis_results, r2_val = 0.4,methods=c("SRS","Stratified","Stratified-Random"))
+make_frontier_plot(analysis_results, r2_val = 0.4,methods=c("Stratified","Optimal","Optimal-Random","Optimal-Pilot-Pooled"))

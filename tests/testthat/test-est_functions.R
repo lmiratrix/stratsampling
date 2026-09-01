@@ -4,7 +4,7 @@
 
 library( tidyverse )
 
-dta = generate_population(N=1000, n_strat=4, oracle=FALSE )
+dta = generate_population(N=1000, n_strat=4 )
 
 sdta = generate_observed_sample( dta, 
                                  Z="Z", strata="strata",
@@ -51,17 +51,6 @@ test_that("core srs estimators call correctly", {
   expect_equal( e1b$SEhat, e1$SEhat )
   expect_true( !is.na( e1$est ) )
   
-  e1c = stratsampling:::est_ma_srs_old( data=sdta, 
-                                        Yhat="Yhat",
-                                        S = "S" )
-  
-  e1
-  e1c
-  
-  # Should they be exact or just close?
-  expect_equal( e1, e1c, tolerance = 0.0001 )
-  
-  
   # Passing a new variable not in the dataframe
   e4 = est_ma_srs( data = sdta,
                    Yobs = ifelse( sdta$Z == 1, sdta$Yobs + 10, sdta$Yobs ),
@@ -73,27 +62,6 @@ test_that("core srs estimators call correctly", {
   e1
   expect_equal( e4$est - e1$est, 10 )
   
-  
-  if ( FALSE ) {
-    e1 = est_ma_strat( data=sdta, 
-                       Yhat="Yhat",
-                       Yobs =dta$Yobs,
-                       strata = NULL,
-                       S = "S", return_pieces = TRUE  )
-    
-    
-    e1c = stratsampling:::est_ma_srs_old( data=sdta, 
-                                          Yobs = dta$Yobs,
-                                          Yhat="Yhat",
-                                          S = "S", return_pieces = TRUE )
-    
-    e1
-    e1c
-    e1$est.part2
-    e1c$est.part
-    
-    
-  }
   
   # Check we get actual variances when we give oracle fully observed outcomes
   e7 = est_ma_srs( data = dta,
@@ -385,29 +353,20 @@ test_that( "no treatment works", {
 
 
 test_that( "Small sample srs = 1 strat", {
-  
-  dta = generate_population(N=100, n_strat=2, oracle=FALSE )
-  
-  sdta = generate_observed_sample( dta, 
+
+  dta = generate_population(N=100, n_strat=2 )
+
+  sdta = generate_observed_sample( dta,
                                    Z="Z", strata=NULL,
                                    n_code=10 )
-  
-  
-  e1b = est_ma_srs( data=sdta, 
+
+
+  e1b = est_ma_srs( data=sdta,
                     Yhat="Yhat" )
-  
-  e1c = stratsampling:::est_ma_srs_old( data=sdta, 
-                                        Yhat="Yhat" )
-  
-  e1b
-  e1c
-  
-  # Should this be more exact?   The "full" is differnet---the correction?
-  expect_equal( e1b$SEhat, e1c$SEhat, tolerance = 0.001 )
-  
-  # Should they be exact or just close?
-  expect_equal( e1b, e1c, tolerance = 0.01 )
-  
+
+  expect_true( !is.na( e1b$SEhat ) )
+  expect_true( e1b$SEhat > 0 )
+
 })
 
 

@@ -1,0 +1,263 @@
+---
+title: "Applied Analysis: Evaluating and Selecting Stratifications"
+output: rmarkdown::html_vignette
+bibliography: references.bib
+vignette: >
+  %\VignetteEncoding{UTF-8}
+  %\VignetteIndexEntry{Applied Analysis: Evaluating and Selecting Stratifications}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options:
+  chunk_output_type: console
+---
+
+```{r, include = FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.width = 6,
+                      fig.height = 4,
+                      out.width = "80%",
+                      collapse = TRUE,
+                      comment = "#>",
+                      message = FALSE,
+                      fig.align = "center")
+options(list(dplyr.summarise.inform = FALSE))
+theme_set( theme_classic() )
+library(stratsampling)
+```
+
+
+# Introduction
+
+The main design choice in stratified sampling is how to define the strata.
+The goal is to group units so that surrogate errors are more similar within strata than across strata.
+Two diagnostics are useful:
+
+1. **Pre-coding evaluation**: Rank candidate stratifications using
+   proxy metrics that are available *before* any human coding takes
+   place. This is the version a researcher can use when designing a study.
+2. **Oracle evaluation**: Compute the variance reduction achieved by
+   candidate stratifications when all outcomes are known. This is mainly a benchmark for simulations, retrospective analyses, and method checks.
+   
+This vignette walks through both approaches using simulated data where
+the ground truth is known, and then shows how to apply the pre-coding
+evaluation to real study design.
+
+To illustrate all of this, we generate a population where the surrogate has moderate bias and
+heterogeneous residual variance. Since this is simulated data, we
+have access to the true outcomes for all units, which enables oracle
+evaluation:
+
+```{r}
+set.seed( 101 )
+dat <- generate_population(N = 2000, n_strat = 5, tau = 0.5,
+                           bias = "moderate",
+                           residual_var = "heterogeneous",
+                           R2_target = 0.7,
+                           strata_config = "balanced-approx")
+
+# Make useless covariate for illustration
+dat$X = rnorm( nrow( dat ) )
+
+# Compute residuals (needed for oracle evaluation functions)
+dat$resid <- dat$Yobs - dat$Yhat
+```
+
+
+# Creating candidate stratifications
+
+The `create_stratification_candidates()` function generates a library
+of stratifications from all combinations of the specified variables
+and a range of strata counts:
+
+```{r}
+candidates <- create_stratification_candidates( dat,
+                                                vars = c("Yhat", "X"),
+                                                Z = "Z" )
+names( candidates )
+```
+
+Each candidate is a factor vector that assigns every observation to a
+stratum. Candidates are named by the variables and number of strata
+used to construct them (e.g., `Yhat_terciles`, `Yhat_quintiles`).
+
+
+# Pre-coding evaluation
+
+Before any human coding, you can rank candidates using the
+`compare_stratifications_precoding()` function. This computes proxy
+metrics based on the surrogate predictions alone:
+
+```{r}
+pre_comparison <- compare_stratifications_precoding( dat,
+                                                      candidates,
+                                                      Z = "Z" )
+pre_comparison
+```
+
+The output includes the between-strata and within-strata variance of
+the surrogate, which serve as proxies for the corresponding quantities
+computed on the true residuals. A good stratification maximizes the
+between-strata variance (i.e., creates strata that are as different as
+possible in terms of surrogate predictions).
+
+
+# Oracle evaluation
+
+When full outcome data are available (as in a simulation or a
+completed study), we can evaluate each candidate using the true
+residuals. The `compare_stratifications()` function computes oracle
+metrics. It requires a `resid` column (Yobs - Yhat) in the data, and returns an overall table summarizing the strataficiations, and a list of detailed information.
+
+```{r}
+oracle_comparison <- compare_stratifications( dat,
+                                               candidates,
+                                               Z = "Z" )
+oracle_comparison$summary
+```
+
+`compare_stratifications()` shows the actual variance reduction achieved by each
+stratification. We can compare the pre-coding and oracle rankings to
+see how well the proxy metrics identify the best stratification:
+
+```{r}
+comparison <- compare_oracle_vs_precoding( oracle_comparison,
+                                            pre_comparison )
+comparison
+```
+
+If the pre-coding and oracle rankings are similar, researchers can
+be confident that the pre-coding evaluation is a reliable guide for
+study design.
+
+
+# Variance decomposition
+
+For a deeper understanding of why a particular stratification works
+well, the `compute_variance_decomposition()` function decomposes the
+total prediction error variance into between-strata and within-strata
+components:
+
+```{r}
+# Pick a specific stratification
+dat$strata <- candidates[["Yhat_quintiles"]]
+
+decomp <- compute_variance_decomposition( dat,
+                                           strata = dat$strata,
+                                           Z = "Z" )
+decomp
+```
+
+The decomposition quantifies how much of the residual variance is
+"explained" by the stratification (between-strata component) versus
+remaining within strata (within-strata component). A larger
+between-strata share means that the stratification is capturing
+meaningful heterogeneity in surrogate accuracy, which translates to
+greater efficiency gains from stratified sampling.
+
+
+# Comparing stratifications visually
+
+The package provides two visualization functions for comparing
+stratifications.
+
+## Decomposition bar chart
+
+The `compare_decomposition_oracle()` function computes the variance
+decomposition for all candidates. The `plot_decomposition_comparison()`
+function then displays the results side by side:
+
+```{r, fig.height = 5}
+decomp_all <- compare_decomposition_oracle( dat,
+                                             candidates,
+                                             n_code = 200,
+                                             Z = "Z" )
+plot_decomposition_comparison( decomp_all )
+```
+
+Stratifications with a larger green (between-strata) share are more
+effective at capturing heterogeneity.
+
+## Residual distribution by stratum
+
+The `plot_strata_residuals()` function shows the distribution of
+residuals within each stratum for a given stratification:
+
+```{r}
+plot_strata_residuals( dat, strata = dat$strata )
+```
+
+A well-chosen stratification produces strata with clearly different
+mean residuals (the bias pattern) and/or different residual spreads
+(the variance pattern).
+
+
+# Optimal allocation
+
+Once a stratification is chosen, you can compute the Neyman (optimal)
+allocation, which allocates more coded observations to strata with
+higher residual variance. The `calc_optimal_allocation_oracle()`
+function computes this allocation:
+
+```{r}
+opt_alloc <- calc_optimal_allocation_oracle( dat, n_code = 200,
+                                              Z = "Z",
+                                              strata = "strata",
+                                              return_counts = TRUE )
+opt_alloc
+```
+
+Compare with proportional allocation (where each stratum is sampled
+at the same rate):
+
+```{r}
+# Proportional allocation counts
+prop_alloc <- dat %>%
+  group_by(Z, strata) %>%
+  summarise(N_k = n(), .groups = "drop") %>%
+  group_by(Z) %>%
+  mutate(n_k_prop = round(100 * N_k / sum(N_k))) %>%
+  ungroup()
+
+# Side-by-side comparison
+left_join(
+  opt_alloc %>% select(.Z, .strata, N.zk, n.zk),
+  prop_alloc %>% select(Z, strata, n_k_prop),
+  by = c(".Z" = "Z", ".strata" = "strata")
+) %>%
+  rename(n_optimal = n.zk, n_proportional = n_k_prop)
+```
+
+Under heterogeneous residual variance, optimal allocation can reduce the variance of the stratified estimator.
+However, in practice, the within-stratum residual variances must be
+estimated from pilot data or prior knowledge.
+
+
+# Practical recommendations
+
+Based on the evaluation framework, we offer some practical
+guidelines for selecting a stratification:
+
+1. **Start with the surrogate as the primary stratification
+   variable.** The surrogate prediction (`Yhat`) typically captures
+   the most relevant variation for reducing estimator variance.
+
+2. **Consider interaction stratifications** when you have domain
+   knowledge suggesting that specific covariates moderate surrogate
+   accuracy. The `make_interaction_strata()` function makes it easy to
+   construct these.
+
+3. **Prefer moderate numbers of strata** (3 to 10). Too few strata
+   fail to capture heterogeneity; too many strata create small cells
+   that increase sampling variability.
+   
+4. **Use proportional allocation as the default.** Unless you have
+   strong prior information about within-stratum variance
+   heterogeneity, proportional allocation is robust and does not
+   require auxiliary information.
+
+5. **Validate with oracle metrics when possible.** If pilot data with
+   coded outcomes are available, use the oracle evaluation functions
+   to confirm that the pre-coding selection is reasonable.
+
+For the theoretical background and formal results underlying these
+methods, see Mozer, Pashley, and Miratrix (2026).

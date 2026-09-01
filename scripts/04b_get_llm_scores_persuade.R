@@ -1,17 +1,11 @@
 
 
-
-## Function that inputs an LLM prompt and essay text and iteratively evaluates to generate numerical quality scores
-### This version uses the new ellmer package, which is easier and more convenient but also slightly more expensive to run
-
-
-Sys.setenv(
-    OPENAI_API_KEY = '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'
-)
-
 library(ellmer)
 library(tidyverse)
 dat=read.csv("raw data/persuade_2.0_human_scores_demo_id_github.csv")
+
+
+dat = dat %>% arrange(task) %>% mutate(ID=row_number())
 
 dat_indep = dat %>% filter(task=="Independent")
 dat_dep = dat %>% filter(task=="Text dependent")
@@ -39,111 +33,138 @@ type_score <- type_object(
     )
 )
 
-## First score the independent essays with the grading rubric as the system prompt
+## Separate independent prompt and text dependent prompt essays and instructions
 text=dat_indep$full_text
 grade=dat_indep$grade_level
 prom=dat_indep$assignment
+gtxt = ifelse(is.na(grade), "", paste0("in grade ", grade, " "))
 
-p <- interpolate("Please score the following essay, which was written by a student in grade {{grade}} in response to the prompt \"{{prom}}\": {{text}}")
+p_indep = interpolate("Please score the following essay, which was written by a student {{gtxt}}in response to the prompt: \"{{prom}}\"\n\n{{text}}")
 
+rm(text,grade,prom,gtxt)
 
-chat_indep <- chat_openai(model="gpt-4o-mini", system_prompt=rubric_indep)
-out1 <-parallel_chat_structured(chat_indep, p[1:5000], type_score, max_active=200,rpm=1000, include_cost = T) # takes 3-5 min to run
-out2 <-parallel_chat_structured(chat_indep, p[5001:10000], type_score, max_active=200,rpm=1000, include_cost = T) 
-out3 <-parallel_chat_structured(chat_indep, p[10001:nrow(dat_indep)], type_score, max_active=200,rpm=1000, include_cost = T) 
-
-out_indep = rbind(out1,out2,out3)
-
-
-sum(out_indep$cost) # how much did running this cost?
-
-dat_indep$LLM_score=out_indep$quality_score
-dat_indep$LLM_confidence=out_indep$confidence_rating
-
-dat_indep %>% mutate(resid=holistic_essay_score-LLM_score) %>% 
-    rename(Yobs=holistic_essay_score, Yhat=LLM_score, ehat=LLM_confidence) %>%
-    summarise(cor_Y_Yhat=cor(Yobs, Yhat), 
-              cor_Y_ehat=cor(Yobs, ehat),
-              cor_Yhat_ehat=cor(Yhat, ehat), 
-              cor_resid_Yhat=cor(resid,Yhat),
-              cor_resid_ehat=cor(resid,ehat),cor_Yhat_wc=cor(Yhat,word_count),cor_resid_wc=cor(resid,word_count),cor_ehat_wc=cor(ehat,word_count))
-
-rm(out1,out2,out3)
-
-## Do the same for the source-dependent essays
+## Dependent interpolated prompts
 text=dat_dep$full_text
 grade=dat_dep$grade_level
 prom=dat_dep$assignment
+gtxt = ifelse(is.na(grade), "", paste0("in grade ", grade, " "))
 
-p <- interpolate("Please score the following essay, which was written by a student in grade {{grade}} in response to the prompt \"{{prom}}\": {{text}}")
+p_dep = interpolate("Please score the following essay, which was written by a student {{gtxt}}in response to the prompt: \"{{prom}}\"\n\n{{text}}")
+rm(text,grade,prom,gtxt)
 
+
+
+### Now process essays by task
+
+### --------------------------------------------- ###
+### ------ SCORE WITH OPENAI (LLM MODEL 1) ------ ### 
+### --------------------------------------------- ###
+set.seed(1234)
+
+chat_indep <- chat_openai(model="gpt-4o-mini", system_prompt=rubric_indep)
+out1 <-parallel_chat_structured(chat_indep, p_indep[1:5000], type_score, max_active=2000,rpm=2000, include_cost = T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat_indep, p_indep[5001:10000], type_score, max_active=200,rpm=1000, include_cost = T) 
+out3 <-parallel_chat_structured(chat_indep, p_indep[10001:nrow(dat_indep)], type_score, max_active=200,rpm=1000, include_cost = T) 
+
+out_indep = rbind(out1,out2,out3)
+rm(out1,out2,out3)
 
 chat_dep <- chat_openai(model="gpt-4o-mini", system_prompt=rubric_dep)
-out1 <-parallel_chat_structured(chat_dep, p[1:6000], type_score, max_active=200,rpm=1000, include_cost = T) # takes 3-5 min to run
-out2 <-parallel_chat_structured(chat_dep, p[6001:nrow(dat_dep)], type_score, max_active=200,rpm=1000, include_cost = T) 
+out1 <-parallel_chat_structured(chat_dep, p_dep[1:6000], type_score, max_active=2000,rpm=1000, include_cost = T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat_dep, p_dep[6001:nrow(dat_dep)], type_score, max_active=2000,rpm=1000, include_cost = T) 
 
 out_dep = rbind(out1,out2)
 
+out = rbind(out_indep, out_dep)
+rm(out1,out2)
 
-sum(out_dep$cost) # how much did running this cost?
-
-dat_dep$LLM_score=out_dep$quality_score
-dat_dep$LLM_confidence=out_dep$confidence_rating
-
-dat_dep %>% mutate(resid=holistic_essay_score-LLM_score) %>% 
-    rename(Yobs=holistic_essay_score, Yhat=LLM_score, ehat=LLM_confidence) %>%
-    summarise(cor_Y_Yhat=cor(Yobs, Yhat), 
-              cor_Y_ehat=cor(Yobs, ehat),
-              cor_Yhat_ehat=cor(Yhat, ehat), 
-              cor_resid_Yhat=cor(resid,Yhat),
-              cor_resid_ehat=cor(resid,ehat),cor_Yhat_wc=cor(Yhat,word_count),
-              cor_resid_wc=cor(resid,word_count),cor_ehat_wc=cor(ehat,word_count))
-
-# Put everything back together
-dat_all = rbind(dat_indep, dat_dep)
-
-dat_all %>% mutate(resid=holistic_essay_score-LLM_score) %>% 
-    rename(Yobs=holistic_essay_score, Yhat=LLM_score, ehat=LLM_confidence) %>%
-    summarise(cor_Y_Yhat=cor(Yobs, Yhat), 
-              cor_Y_ehat=cor(Yobs, ehat),
-              cor_Yhat_ehat=cor(Yhat, ehat), 
-              cor_resid_Yhat=cor(resid,Yhat),
-              cor_resid_ehat=cor(resid,ehat),cor_Yhat_wc=cor(Yhat,word_count),cor_resid_wc=cor(resid,word_count),cor_ehat_wc=cor(ehat,word_count))
+dat.out = dat %>% select(ID, essay_id_comp:grade_level) %>% 
+    mutate(LLM_score=out$quality_score,
+           LLM_confidence=out$confidence_rating,
+           provider=chat_indep$get_provider()@name,
+           model=chat_indep$get_model() )
 
 
-dat_persuade=dat_all
+### --------------------------------------------- ###
+### ------ SCORE WITH MISTRAL (LLM MODEL 2) ----- ### 
+### --------------------------------------------- ###
+set.seed(1234)
 
-save(dat_persuade, file="generated data/persuade-data-with-LLM-predictions-v3.RData")
+chat2_indep <- chat_mistral(model="ministral-3b-latest", system_prompt=rubric_indep)
+out1 <-parallel_chat_structured(chat2_indep, p_indep[1:5000], type_score, max_active=500, rpm=1000, include_cost=T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat2_indep, p_indep[5001:10000], type_score, max_active=500,rpm=1000, include_cost = T) 
+out3 <-parallel_chat_structured(chat2_indep, p_indep[10001:nrow(dat_indep)], type_score, max_active=500,rpm=1000, include_cost = T) 
+
+out_indep = rbind(out1,out2,out3)
+rm(out1,out2,out3)
+
+chat2_dep <- chat_mistral(model="ministral-3b-latest", system_prompt=rubric_dep)
+out1 <-parallel_chat_structured(chat2_dep, p_dep[1:6000], type_score, max_active=500,rpm=1000, include_cost = T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat2_dep, p_dep[6001:nrow(dat_dep)], type_score, max_active=500,rpm=1000, include_cost = T) 
+
+out_dep = rbind(out1,out2)
+
+out = rbind(out_indep, out_dep)
+rm(out1,out2)
+
+dat.out2 = dat %>% select(ID, essay_id_comp:grade_level) %>% 
+    mutate(LLM_score=out$quality_score,
+           LLM_confidence=out$confidence_rating,
+           provider=chat2_dep$get_provider()@name,
+           model=chat2_dep$get_model() )
 
 
-library(ggplot2)
+### --------------------------------------------- ###
+### ------ SCORE WITH GEMINI (LLM MODEL 3) ------ ### 
+### --------------------------------------------- ###
+set.seed(1234)
 
-dat_all = dat_all %>% rename(Yobs=holistic_essay_score, Yhat=LLM_score, ehat=LLM_confidence) %>%
-    mutate(resid=Yobs-Yhat, log_wc=log(word_count))
+chat3_indep <- chat_google_gemini(model="gemini-3.1-flash-lite", system_prompt=rubric_indep)
+out1 <-parallel_chat_structured(chat3_indep, p_indep[1:5000], type_score, max_active=2000,rpm=1000, include_cost = T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat3_indep, p_indep[5001:10000], type_score, max_active=2000,rpm=1000, include_cost = T) 
+out3 <-parallel_chat_structured(chat3_indep, p_indep[10001:nrow(dat_indep)], type_score, max_active=2000,rpm=1000, include_cost = T) 
 
-scatter_with_r2 <- function(data, xvar, yvar) {
-    x <- data[[xvar]]
-    y <- data[[yvar]]
-    
-    fit <- lm(y ~ x)
-    r2  <- summary(fit)$r.squared
-    
-    ggplot(data, aes(x = x, y = y,col=as.factor(Yobs))) +
-        geom_point(alpha = 0.6) +
-        geom_smooth(method = "lm", se = FALSE, color = "blue") +
-        annotate("text",
-                 x = Inf, y = Inf,
-                 label = paste0("R² = ", round(r2, 3)),
-                 hjust = 1.1, vjust = 1.5, size = 5) +
-        labs(x=xvar, y=yvar,col="Human score")+
-        theme_minimal()
-}
+out_indep = rbind(out1,out2,out3)
+rm(out1,out2,out3)
 
- scatter_with_r2(dat_all, "Yhat", "Yobs")
- scatter_with_r2(dat_all, "ehat", "Yobs")
- scatter_with_r2(dat_all, "Yhat", "ehat")
- scatter_with_r2(dat_all, "word_count", "ehat")
- scatter_with_r2(dat_all, "log_wc", "ehat")
- 
- 
+chat3_dep <- chat_google_gemini(model="gemini-3.1-flash-lite", system_prompt=rubric_dep)
+out1 <-parallel_chat_structured(chat3_dep, p_dep[1:6000], type_score, max_active=1000,rpm=1000, include_cost = T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat3_dep, p_dep[6001:nrow(dat_dep)], type_score, max_active=1000,rpm=1000, include_cost = T) 
+
+out_dep = rbind(out1,out2)
+
+out = rbind(out_indep, out_dep)
+rm(out1,out2)
+
+dat.out3 = dat %>% select(ID, essay_id_comp:grade_level) %>% 
+    mutate(LLM_score=out$quality_score,
+           LLM_confidence=out$confidence_rating,
+           provider=chat3_dep$get_provider()@name,
+           model=chat3_dep$get_model() )
+
+
+
+
+## -- Combine scores/output from all models -- ## 
+
+dat.all = rbind(dat.out,dat.out2,dat.out3)
+dat.all$model_short = sapply(1:nrow(dat.all), function(x) strsplit(dat.all$model[x], "-")[[1]][1])
+
+dat.all = dat.all %>% rename(Yhat=LLM_score, Yhat.conf=LLM_confidence)
+
+
+all.pred = dat.all %>% select(-provider, -model) %>% pivot_wider(names_from=model_short, values_from=c(Yhat, Yhat.conf))
+
+
+names(all.pred)
+
+
+all.pred$n_distinct = apply(all.pred %>% select(starts_with("Yhat_")),1,n_distinct)
+all.pred$Yhat.mean=rowMeans(all.pred %>% select(starts_with("Yhat_")))
+
+
+persuade.model.info=dat.all%>%group_by(provider,model,model_short)%>%summarise(n=n()) %>% mutate(date_run=Sys.Date())
+
+save(all.pred, persuade.model.info, file="generated data/persuade-data-with-all-LLM-predictions.RData")
+
  

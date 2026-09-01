@@ -2,7 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{calc_optimal_allocation_oracle}
 \alias{calc_optimal_allocation_oracle}
-\title{Oracle optimal allocation calculator}
+\title{Oracle optimal allocation (wrapper)}
 \usage{
 calc_optimal_allocation_oracle(
   dat,
@@ -11,14 +11,40 @@ calc_optimal_allocation_oracle(
   strata = NULL,
   Yobs = "Yobs",
   Yhat = "Yhat",
+  distort = c("none", "permute", "random", "reverse"),
+  min_n = 2,
   return_counts = FALSE,
   seed = NULL
 )
 }
+\arguments{
+\item{dat}{Data frame.}
+
+\item{n_code}{Total number of units for coding, INCLUDING any pilot units
+flagged by \code{S_pilot}.}
+
+\item{Z}{Name of treatment indicator column, or NULL to ignore
+treatment. If passed, allocation is computed within arm.}
+
+\item{strata}{Name of stratification column. If NULL, all units form a
+single stratum.}
+
+\item{Yobs, Yhat}{Names of observed/predicted outcome columns (or
+vectors). Only required when \code{var_alloc} is NULL (oracle mode).}
+
+\item{distort}{"none" (default), "permute" (shuffle variance parameters
+across cells within arm), "random" (generate random variance parameters) or "reverse" (rank-reverse within arm).}
+
+\item{min_n}{Minimum coded units per cell (capped at cell size).
+Default 2 so within-cell variances are estimable. Set 0 for no floor.}
+
+\item{return_counts}{If TRUE, return the allocation table instead of
+the sampled data.}
+
+\item{seed}{Optional random seed.}
+}
 \description{
-This method assumes we have Yobs known for everyone, and thus is an
-oracle.  It will look at the actual residuals (Yobs - Yhat) to
-determine optimal allocation of samples across strata (and
-treatment arms if Z passed) to minimize variance of the
-model-assisted estimator.
+Backwards-compatible wrapper for \code{\link{calc_optimal_allocation}}
+in oracle mode (variance parameters computed from the actual residuals,
+requiring Yobs for all units, and no pilot).
 }
