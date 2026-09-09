@@ -13,6 +13,24 @@ estimate_R2(
   strata = "strata"
 )
 }
+\arguments{
+\item{data}{Data frame containing outcome, surrogate, sampling
+indicator, treatment, and stratification columns.}
+
+\item{Yhat}{Name of the surrogate score column. Default is \code{"Yhat"}.}
+
+\item{Yobs}{Name of the human-coded outcome column. Default is
+\code{"Yobs"}.}
+
+\item{S}{Name of the sampling indicator column (1 = coded, 0 = not
+coded). Default is \code{"S"}.}
+
+\item{Z}{Name of the treatment indicator column, or \code{NULL} for a
+population mean. Default is \code{"Z"}.}
+
+\item{strata}{Name of the stratification column, or \code{NULL} for
+unstratified (SRS) estimation. Default is \code{"strata"}.}
+}
 \value{
 A tibble containing the estimated R2 of the stratification
 (how much machine predictions vary across strata) and of the

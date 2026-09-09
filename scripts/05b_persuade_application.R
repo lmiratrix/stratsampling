@@ -14,15 +14,17 @@ library(gt)
 
 
 # Load the data
-load("generated data/persuade-data-with-LLM-predictions-v3.RData")
+load("generated data/persuade-data-with-all-LLM-predictions.RData")
+all.pred$ehat.mean=rowMeans(all.pred %>% select(starts_with("Yhat.conf_")))
 
-dat=dat_persuade %>% rename(score=holistic_essay_score)
+dat=all.pred %>% rename(score=holistic_essay_score)
+
 
 stats = dat %>% 
     summarise( mn = mean( score ),
                sd_Y = sd( score ), 
                n = n(), 
-               sd_Yhat=sd(LLM_score))
+               sd_Yhat=sd(Yhat.mean))
 
 avg_stats = stats %>% 
     summarise( sd_bar_Y = sqrt( weighted.mean( sd_Y^2, w=n ) ),
@@ -30,25 +32,29 @@ avg_stats = stats %>%
 
 
 
-dat$score=dat$score/avg_stats$sd_bar_Y
-dat$LLM_score=dat$LLM_score/avg_stats$sd_bar_Yhat
+
+dat = dat %>%  mutate(Yhat_raw=Yhat.mean, 
+           score = score/avg_stats$sd_bar_Y,
+           Yhat = Yhat.mean / avg_stats$sd_bar_Yhat)
 
 dat <- dat %>% 
-    select(score, LLM_score, LLM_confidence,
-           essay_id_comp, task, grade_level, word_count) %>%
-    rename(Yobs = score, 
-           Yhat = LLM_score, 
-           ehat=LLM_confidence) %>%
-    mutate(ID = row_number())
-
+    select(ID, essay_id_comp, score, word_count, prompt_name, task, 
+           gender, grade_level, score, 
+           Yhat_raw, Yhat, ehat.mean, n_distinct) %>%
+    rename(Yobs = score,
+           ehat = ehat.mean,
+           n_distinct_Yhat=n_distinct) 
 
 # Basic descriptives
 cat("Sample size:", nrow(dat), "\n")
 cat("Mean outcome:", mean(dat$Yobs), "\n")
 
 # Overall R²
-overall_r2 <- cor(dat$Yobs, dat$Yhat)^2
-cat("Overall R² between human and LLM scores:", round(overall_r2, 3), "\n")
+overall_r = cor(dat$Yobs, dat$Yhat)
+overall_r2 = cor(dat$Yobs, dat$Yhat)^2
+SE_r = sqrt((1-overall_r^2)/(nrow(dat)-2))
+
+cat(sprintf("Correlation: %.3f (SE=%.3f)\nOverall R² between human and LLM scores: %.3f\n", overall_r, SE_r, overall_r2))
 
 
 # Calculate residuals
@@ -179,15 +185,33 @@ gridExtra::grid.arrange(p_length, p_pred, p_conf, ncol= 3)
 
 ##  Create and Evaluate Candidate Stratifications
 library(stratsampling)
-dat$Yhat2 = as.numeric(cut(dat$Yhat,breaks=c(0,3,5,6,Inf))) # group rare very low/high scores with closest values
+
+dat$Yhat_binned = cut(dat$Yhat_raw, breaks=c(1,2,2.9,3,3.9,4,6),include.lowest=T) # group rare very low/high scores with closest values
+#dat$Yhat_binned2 = cut(dat$Yhat_raw,breaks=c(1,2.5, 2.9, 3, 3.9,6),include.lowest=T) # group rare very low/high scores with closest values
+
+dat$all_agree = ifelse(dat$n_distinct_Yhat==1,1,0)
+
 dat$essay_length = cut(dat$word_count,breaks=c(0,median(dat$word_count),Inf))
 
 
 
 # Create candidate stratifications
-candidates <- create_stratification_candidates(dat,vars = c("Yhat2", "ehat", "word_count"), seed=12345)
-candidates$Yhat2_word_count_4x2 = interaction(dat$Yhat2,dat$essay_length)
+candidates <- create_stratification_candidates(dat,vars = c("Yhat", "n_distinct_Yhat", "ehat", "word_count","all_agree"), seed=12345)
+candidates$Yhat_binned_word_count_6x2 = interaction(dat$Yhat_binned,dat$essay_length)
 
+candidates$Yhat_binned=dat$Yhat_binned
+candidates$Yhat_binned_LLM_agreement = interaction(dat$Yhat_binned,dat$n_distinct_Yhat)
+
+candidates$all_agree=dat$all_agree
+candidates$LLM_agreement=dat$n_distinct_Yhat
+
+# Remove any candidates with only one unit per stratum
+min_n = plyr::laply(candidates,function(x){
+    tab = table(x)
+    return(min(tab[tab!=0]))})
+rm_ind = which(min_n==1)
+
+candidates = candidates[-c(rm_ind)]
 
 # Evaluate all candidates
 comparison_oracle <- compare_stratifications(dat, candidates, Z=NULL, min_var_threshold = 0.01) # comparison using residuals (not feasible in practice)
@@ -196,23 +220,24 @@ comparison_precoding <- compare_stratifications_precoding(dat, candidates,Z=NULL
 
 # Select top candidates meeting criteria
 top_candidates <- comparison_oracle$summary %>%
-    filter( min_stratum_size > 10, min_var_resid > 0.01) %>%
+    filter( min_stratum_size > 10, min_var_resid > 0.01) %>% 
+    mutate(gain=mean_spread - avg_within_var_resid) %>%
     arrange(desc(mean_spread)) %>%
-    head(5)
+    head(10)
 
 cat("\n=== Top 5 Candidate Stratifications ===\n")
 cat("Based on oracle comparisons (using known residuals Yobs-Yhat):")
 print(top_candidates)
 
 cat("Based on pre-coding comparisons (using only predictions Yhat): ")
-head(comparison_precoding,n=5)
+head(comparison_precoding %>% filter(min_stratum_size>10),n=10)
 
 
 ## Plot pre-coding proxy for stratification benefit vs. oracle
 oracle_vs_precoding <- compare_oracle_vs_precoding(
     oracle_comparison = comparison_oracle,
     precoding_comparison = comparison_precoding,
-    top_n = 19
+    top_n = 60
 )
 
 
@@ -232,17 +257,22 @@ ggsave("figures/persuade_precoding_strat_variance-reduction.pdf",decomp,  width 
 
 ## Select Final Stratification
 # Apply best stratification
-strat_name="Yhat2_word_count_4x2"
+strat_name="Yhat_binned_word_count_6x2"
 dat$strata <- candidates[[strat_name]] # choose one that doesn't use residuals (oracle)
 
 plot_strata_residuals(dat, dat$strata)
 compute_variance_decomposition(dat, strata=dat$strata,Z=NULL)
 
-levels(dat$essay_length) = c("Low", "High")
-dat$Yhat2 = factor(dat$Yhat2,levels=1:4,labels=c("1-2","3","4","5-6"))
+
+
+### UPDATE TABLE HERE
+dat$essay_length = as.numeric(cut(dat$word_count,breaks=c(0,median(dat$word_count),Inf)))
+
+dat$essay_length=factor(dat$essay_length,levels=1:2,labels=c("Low","High"))
+
 # Document characteristics
 strata_characteristics <- dat %>%
-    group_by( strata, Yhat2, essay_length) %>%
+    group_by( strata, essay_length, Yhat_binned) %>%
     summarise(
         N_zk = n(),
         mean_Yobs = mean(Yobs),
@@ -253,17 +283,17 @@ strata_characteristics <- dat %>%
         sd_resid = sd(resid),
         mean_word_count = mean(word_count),
         .groups = "drop"
-    ) %>% arrange(Yhat2,essay_length)
+    ) %>% arrange(essay_length, Yhat_binned)
 
 print(strata_characteristics)
 
 
 ## Output Stratification Characteristics Table
-strata_table <- strata_characteristics %>%
+strata_table <- strata_characteristics %>% arrange(essay_length, Yhat_binned) %>% 
     mutate(
        k= row_number(),
-        `Pred. Quality`=Yhat2,
-        `Word Count` = essay_length,
+       `Essay Length` =essay_length,
+        `Pred. Quality`=Yhat_binned,
         N = N_zk,
         `Mean $Y$` = sprintf("%.2f", mean_Yobs),
         `Mean $\\hat{Y}$` = sprintf("%.2f", mean_Yhat),
@@ -271,14 +301,19 @@ strata_table <- strata_characteristics %>%
         `Var(Resid.)` = sprintf("%.2f", var_resid),
         `Avg. Length` = sprintf("%.0f", mean_word_count)
     ) %>% 
-    select( k, `Pred. Quality`, `Word Count`, N, `Mean $\\hat{Y}$`, `Avg. Length`,
-           `Mean Resid.`, `Var(Resid.)`, )
+    select( k,  `Essay Length`,`Pred. Quality`, N, 
+           `Mean Resid.`, `Var(Resid.)`) %>%
+    rename( 
+            `$k$`      = k,
+            `$N_{k}$` = N,
+            `Pred. Quality ($\\hat{Y}$)` = `Pred. Quality`
+    )
 
 
 
-kbl(strata_table, format = "latex", booktabs = TRUE,  
-    caption = "Characteristics of final stratification for the PERSUADE corpus determined by predicted quality scores and essay length (word count).",
-    linesep=c("", "", "","\\addlinespace"),escape=FALSE) %>% 
+kbl(strata_table, format = "latex", booktabs = TRUE,  label="persuade_strat",
+    caption = "Characteristics of final stratification for the PERSUADE corpus determined by word count (low vs. high) and (binned) predicted quality score.",
+    linesep="",escape=FALSE) %>% 
     write_file("tables/persuade_empirical_strata.tex")
 
 
@@ -289,7 +324,7 @@ source("scripts/application_functions.R")  # From previous code
 source("scripts/sim_functions.R")
 
 # Single sample at 30% coding budget
-single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=1111)
+single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=2025)
 
 comparison_table <- create_comparison_table(single_estimates)
 print(comparison_table)
@@ -317,12 +352,25 @@ multi_estimates <- compute_multiple_sample_estimates(dat, Z=NULL, coding_fractio
 multi_summary <- create_multi_sample_summary(multi_estimates)
 print(multi_summary)
 
+
+kbl(multi_summary,  format = "latex", booktabs = TRUE,  
+    caption = "Results for the PERSUADE corpus estimating the mean writing quality score from 20 separate iterations (samples) with coding budget of h=30\\%.",
+    label="persuade_multi_ests",escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
+    write_file("tables/persuade-ests-multi-iter.tex")
+
+
 # Multi-sample forest plot
 forest_multi <- create_multi_sample_forest_plot(multi_estimates, oracle_est = oracle$est,tx=FALSE,jitter_seed=2025)
 print(forest_multi)
 ggsave("figures/persuade_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
 
 
+scatter=oracle_vs_precoding$scatter_plot
+
+
+persuade_figs=list(decomp=decomp, forest_multi=forest_multi, forest_plot=forest_plot, scatter=scatter)
+names(persuade_figs)=paste0("persuade_",names(persuade_figs))
+save(persuade_figs,file="results/persuade_figs.RData")
 
 
 # -----------------------------------------------------------------------------

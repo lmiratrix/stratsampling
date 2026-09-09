@@ -2,8 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{generate_sample_index}
 \alias{generate_sample_index}
-\title{Given a full population, generate a vector of indicators for who is
-sampled.}
+\title{Generate Stratified or Simple Random Sample Indicators}
 \usage{
 generate_sample_index(
   dat,
@@ -15,35 +14,42 @@ generate_sample_index(
 )
 }
 \arguments{
-\item{n_code}{Number to code.  If single number, will roughly split
-across all strata under stratified proportional to the strata
-sizes.  If a vector of length strata, will code that many in each
-strata (ignoring treatment assignment unless tx col passed). If
-tx col passed, then it is best to make sure the passed strata all
-are all treatment or all control, although it will interact
-strata with treatment indicator, and then order the strata as all
-control strata followed by all treatment strata.  So if there is
-strata 1,2,3, you would get six strata of 1-0,2-0,3-0, and then
-1-1,2-1,3-1. You would then need to pass a vector of length 6 for
-n_code (or a single number for total sample size). For SRS, will
-sample ignoring treatment assignment unless treatment column
-passed, and then either make two strata (a co and tx strata) and
-spread n_code across it, or take a vector of length 2 for n_code
-for control, then treatment.}
+\item{dat}{Data frame containing the population.}
 
-\item{Z}{If NULL, sample ignoring treatment.  If not null,
-sample within substrata defined by interacting strata with
-treatment.}
+\item{n_code}{Sample size specification. If a single number, units
+are allocated proportionally across strata (and treatment arms if
+\code{Z} is specified). If a vector matching the number of
+strata-by-treatment cells, specifies exact counts per cell.}
 
-\item{strata}{Name of stratification to use.  If null will do
-SRS (i.e., treat all units as a single strata).}
+\item{Z}{Character string naming the treatment indicator column, or
+\code{NULL} to ignore treatment assignment. When specified,
+sampling is done within substrata defined by crossing strata with
+treatment. Default is \code{NULL}.}
 
-\item{p_tx}{Proportion of sample to allocate to treatment arm, if
-treatment arm is defined and n_code doesn't specify exact amounts
-for each strata.  If NULL, then will allocation proportional to
-proportion actually treated in each strata.}
+\item{strata}{Character string naming the stratification column, or
+\code{NULL} for SRS (all units in one stratum). Default is
+\code{NULL}.}
+
+\item{p_tx}{Numeric between 0 and 1. Proportion of the total
+sample allocated to the treatment arm when \code{Z} is specified
+and \code{n_code} is a single number. If \code{NULL}, uses the
+observed treatment proportion. Default is 0.5.}
+
+\item{seed}{Optional integer seed for reproducibility.}
+}
+\value{
+An integer vector of length \code{nrow(dat)} with values 0
+(not sampled) or 1 (sampled).
 }
 \description{
-Given a full population, generate a vector of indicators for who is
-sampled.
+Given a population data frame, generates a binary vector indicating
+which units are selected for human coding. Supports simple random
+sampling (SRS), stratified proportional allocation, and custom
+per-stratum sample sizes.
+}
+\seealso{
+\code{\link{generate_observed_sample}} for a wrapper that
+also masks unsampled outcomes,
+\code{\link{calc_sampling_weights}} for computing the implied
+sampling probabilities.
 }

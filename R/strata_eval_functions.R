@@ -1,379 +1,4 @@
 
-# Labels for different numbers of groups
-get_labels <- function(n_groups, var_name) {
-    base_labels <- switch(as.character(n_groups),
-                          "2" = c("Low", "High"),
-                          "3" = c("Low", "Med", "High"),
-                          "4" = c("Low", "Med-Low", "Med-High", "High"),
-                          "5" = c("Very Low", "Low", "Med", "High", "Very High"),
-                          paste0("Q", 1:n_groups)
-    )
-    paste(base_labels, var_name)
-}
-
-
-collapse_ordered_adjacent <- function(x, n_group, var_name) {
-    x = as.factor(x)
-    lv <- levels(x)
-    n = length(x)
-    
-    counts <- table(x)
-    grp <- tibble(level = lv, n = as.integer(counts)) %>%
-        mutate(level_i = map( lv, ~  .x ) )
-
-    while (nrow(grp) > n_group) {
-        i_min <- which.min(grp$n)
-        
-        if (i_min == 1) {
-            j <- 2
-        } else if (i_min == nrow(grp)) {
-            j <- nrow(grp) - 1
-        } else {
-            j <- if (grp$n[i_min - 1] <= grp$n[i_min + 1]) i_min - 1 else i_min + 1
-        }
-        
-        i <- min(i_min, j)
-        grp$n[i] <- grp$n[i] + grp$n[i + 1]
-        grp$level_i[i] <- list( c( grp$level_i[[i]], grp$level_i[[i+1]]) )
-        grp = grp[ -(i+1), ]
-    }
-    
-    fmt_label <- function(x) {
-        if (length(x) == 1) {
-            return(x)
-        } else if (length(x) == 2) {
-            return( paste0( x[[1]], ",", x[[2]] ) )
-        } else {
-            return( paste0( x[[1]], "-", x[[length(x)]] ) )
-        }
-    }
-    
-    mapping <- tibble(
-        orig = unlist(grp$level_i),
-        new  = map_chr(grp$level_i, fmt_label) |> rep(times = lengths(grp$level_i))
-    )
-    mapping$new = paste0( var_name, "=", mapping$new )
-    
-    out <- mapping$new[match(x, mapping$orig)]
-    factor(out, levels = unique(mapping$new))
-}
-
-
-# Create quantile-based strata (returns NULL if breaks aren't unique)
-make_quantile_strata <- function(x, n_groups, var_name = "X") {
-    
-    n <- length(x)
-    
-    if ( n_distinct( x ) < n_groups ) {
-        return(NULL)
-    }
-    
-    # treat x as categorical if factor/character/logical, or if n is NULL/NA
-    is_cat <- is.factor(x) || is.character(x) || is.logical(x) || 
-        ( n_distinct(x) <= pmin( 30, 5*n_groups ))
-    
-    if (is_cat) {
-        f <- collapse_ordered_adjacent(x, n_groups, var_name)
-        return(f)
-    }
-    
-    probs <- seq(0, 1, length.out = n_groups + 1)
-    breaks <- quantile(x, probs = probs, na.rm = TRUE)
-    if (dplyr::n_distinct(breaks) < n_groups + 1) return(NULL)
-    labels <- get_labels(n_groups, var_name)
-    cut(x, breaks = breaks, labels = labels, include.lowest = TRUE)
-}
-
-
-# Create quantile-based strata separately by treatment arm
-make_quantile_strata_by_arm <- function(x, z_vec, n_groups, var_name = "X") {
-    
-    # TODO: What is proper behavior of this method?  If we are
-    # collapsing strata, then we could get different strata names for
-    # the different arms.  Is that ok?  Alternatively, right now the
-    # code keeps the same cutpoints at start, so z_vec does not
-    # actually impact which unit is in which strata.  That behavior
-    # seems clean, so I am updating following code to just ignore
-    # z_vec for now.
-    
-    warning( "The make_quantile_strata_by_arm method is not fully developed at this moment" )
-    
-    probs <- seq(0, 1, length.out = n_groups + 1)
-    labels <- get_labels(n_groups, var_name)
-    
-    # Initialize result vector
-    result <- factor(rep(NA_character_, length(x)), levels = labels)
-    
-    # Process each treatment arm separately
-    for (z_val in unique(z_vec)) {
-        idx <- which(z_vec == z_val)
-        x_arm <- x[idx]
-        
-        breaks <- quantile(x_arm, probs = probs, na.rm = TRUE)
-        if (dplyr::n_distinct(breaks) < n_groups + 1) return(NULL)
-        
-        result[idx] <- cut(x_arm, breaks = breaks, labels = labels, include.lowest = TRUE)
-    }
-    
-    result
-}
-
-#' Create Interaction-Based Stratification (Continuous or Categorical)
-#'
-#' Constructs an interaction stratification from two variables. Each variable
-#' may be continuous (binned into quantile-based strata) or categorical
-#' (used directly as factor levels). Optionally, quantile strata can be
-#' constructed within treatment arms.
-#'
-#' If a variable is a factor, character, or logical vector—or if `n` is
-#' `NULL` or `NA`—it is treated as categorical. Otherwise, it is treated
-#' as continuous and partitioned into `n` quantile strata.
-#'
-#' @param x1 First stratification variable.
-#' @param n1 Number of quantile strata for `x1` (ignored if categorical).
-#' @param var_name1 Character string used in labeling strata for `x1`.
-#' @param x2 Second stratification variable.
-#' @param n2 Number of quantile strata for `x2` (ignored if categorical).
-#' @param var_name2 Character string used in labeling strata for `x2`.
-#' @param z_vec Optional treatment indicator. If supplied and a variable
-#'   is continuous, quantile strata are constructed within treatment arms.
-#'
-#' @return A factor representing the interaction of the two stratifications,
-#'   with empty levels dropped. Returns `NULL` if either stratification fails.
-#'
-#' @export
-make_interaction_strata <- function(x1, n1, var_name1 = NULL, 
-                                    x2 = NULL, n2 = NULL, var_name2 = NULL,
-                                    z_vec = NULL) {
-    
-    if ( !is.null(x2) && ( length(x1) != length(x2) ) ) {
-        stop("x1 and x2 must be the same length")
-    }
-    
-    make_strata_one <- function(x, n, var_name, z_vec = NULL) {
-        # treat as categorical if factor/character/logical, or if n is NULL/NA
-        is_cat <- is.factor(x) || is.character(x) || is.logical(x) || is.null(n) || is.na(n) || n_distinct(x) <= n
-        
-        if (is_cat) {
-            f <- as.factor(x)
-            levs <- levels(f)
-            levels(f) <- paste0(var_name, "=", levs)
-            return(f)
-        }
-        
-        if (is.null(z_vec)) {
-            make_quantile_strata(x, n, var_name)
-        } else {
-            make_quantile_strata(x, n, var_name)
-            #make_quantile_strata_by_arm(x, z_vec, n, var_name)
-        }
-    }
-    
-    if ( is.null( var_name1 ) ) {
-        var_name1 <- "Var1"
-    }
-    
-    s1 <- make_strata_one(x1, n1, var_name1, z_vec)
-    if ( is.null(s1) ) {
-        return(NULL)
-    }
-    
-    if ( !is.null( x2 ) ) {
-        if ( is.null( var_name2 ) ) {
-            var_name2 <- "Var2"
-        }
-        s2 <- make_strata_one(x2, n2, var_name2, z_vec)
-        
-        if ( is.null(s2) ) {
-            return(NULL)
-        }
-        s_int <- interaction(s1, s2, drop = TRUE, sep = " / ")
-        stopifnot( length( s_int ) == length(x1) )
-        s_int
-    } else {
-        s1   
-    }
-}
-
-
-
-
-#' Create Candidate Stratification Variables
-#'
-#' Generates a set of candidate stratification variables for use in stratified
-#' model-assisted estimation. Creates single-variable stratifications (tertiles,
-#' quartiles, quintiles) for each specified variable, as well as interaction
-#' stratifications for all pairs of variables.
-#'
-#' @param dat Data frame containing the variables to stratify on.
-#' @param vars Character vector specifying the names of columns in \code{dat}
-#'   to use for creating stratifications.
-#' @param Z Optional character string specifying the name of the treatment
-#'   indicator variable in \code{dat}. If provided, stratifications are computed
-#'   separately within each treatment arm, ensuring balanced strata across arms.
-#'   Default is \code{NULL} (pooled stratification).
-#' @param jitter_vars Character vector specifying which variables (subset of
-#'   \code{vars}) should have small random noise added before computing quantile
-#'   breaks. This helps avoid ties that can cause \code{cut()} to fail. Default
-#'   is \code{NULL} (no jitter applied).
-#' @param sd_jitter Numeric value specifying the standard deviation of the
-#'   jitter noise. Default is \code{1e-3}.
-#' @param seed Optional integer seed for reproducibility when jitter is applied.
-#'   Default is \code{NULL}.
-#'
-#' @return A named list of factor vectors, each representing a candidate
-#'   stratification. Names follow the convention:
-#'   \describe{
-#'     \item{Single-variable}{`{var}_tertiles`, `{var}_quartiles`, `{var}_quintiles`}
-#'     \item{Interactions}{`{var1}_{var2}_2x2`, `{var1}_{var2}_2x3`, `{var1}_{var2}_3x2`, `{var1}_{var2}_3x3`}
-#'   }
-#'   Factor levels have meaningful labels (e.g., "Low Yhat", "Med Yhat / High word_count").
-#'   Stratifications that fail due to non-unique quantile breaks are automatically
-#'   excluded from the output.
-#'
-#' @details
-#' For each variable in \code{vars}, the function creates three stratifications
-#' based on quantiles:
-#' \itemize{
-#'   \item Tertiles (3 groups): Low, Med, High
-#'   \item Quartiles (4 groups): Low, Med-Low, Med-High, High
-#'   \item Quintiles (5 groups): Very Low, Low, Med, High, Very High
-#' }
-#'
-#' For each unique pair of variables, the function creates four interaction
-#' stratifications by crossing quantile groups:
-#' \itemize{
-#'   \item 2x2: median split on both variables (4 strata)
-#'   \item 2x3: median split on first, tertiles on second (6 strata)
-#'   \item 3x2: tertiles on first, median split on second (6 strata)
-#'   \item 3x3: tertiles on both variables (9 strata)
-#' }
-#'
-#' When \code{Z} is provided, quantile breaks are computed separately within
-#' each treatment arm. This ensures that the same proportion of treated and
-#' control units fall into each stratum level, which is important for
-#' maintaining balance in stratified estimation.
-#'
-#' When a variable has many tied values, quantile breaks may not be unique,
-#' causing \code{cut()} to fail. Use \code{jitter_vars} to add small random
-#' noise (SD = 0.001) to such variables before computing breaks.
-#'
-#' @export
-create_stratification_candidates <- function(dat, vars, Z = NULL, jitter_vars = NULL, sd_jitter = 1e-3, seed = NULL) {
-    
-    if (!is.null(seed)) set.seed(seed)
-    
-    n <- nrow(dat)
-    
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    # Helper functions
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    
-    
-    
-    
-    
-    # Apply jitter to a variable
-    add_jitter <- function(x) x + rnorm(length(x), 0, sd_jitter)
-    
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    # Validate and extract treatment indicator if provided
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    
-    z_vec <- NULL
-    if (!is.null(Z)) {
-        if (!Z %in% names(dat)) {
-            stop(paste("Treatment variable", Z, "not found in dat"))
-        }
-        z_vec <- dat[[Z]]
-        if (length(unique(z_vec)) < 2) {
-            warning("Treatment variable Z has fewer than 2 unique values. Ignoring Z.")
-            z_vec <- NULL
-        }
-    }
-    
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    # Prepare variables (with jitter for specified vars)
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    
-    if (is.null(jitter_vars)) jitter_vars <- character(0)
-    
-    var_data <- lapply(vars, function(v) {
-        x <- dat[[v]]
-        if (is.null(x)) stop(paste("Variable", v, "not found in dat"))
-        if (v %in% jitter_vars) add_jitter(x) else x
-    })
-    names(var_data) <- vars
-    
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    # Generate single-variable stratifications (tertiles, quartiles, quintiles)
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    
-    single_strats <- list()
-    
-    for (v in vars) {
-        #if (is.null(z_vec)) {
-        if ( TRUE ) {
-            # TODO: Disabled make by arm since not sure what proper behavior should be.
-            
-            # Pooled stratification
-            single_strats[[paste0(v, "_tertiles")]]  <- make_quantile_strata(var_data[[v]], 3, v)
-            single_strats[[paste0(v, "_quartiles")]] <- make_quantile_strata(var_data[[v]], 4, v)
-            single_strats[[paste0(v, "_quintiles")]] <- make_quantile_strata(var_data[[v]], 5, v)
-        } else {
-            # Stratification by treatment arm
-            single_strats[[paste0(v, "_tertiles")]]  <- make_quantile_strata_by_arm(var_data[[v]], z_vec, 3, v)
-            single_strats[[paste0(v, "_quartiles")]] <- make_quantile_strata_by_arm(var_data[[v]], z_vec, 4, v)
-            single_strats[[paste0(v, "_quintiles")]] <- make_quantile_strata_by_arm(var_data[[v]], z_vec, 5, v)
-        }
-    }
-    
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    # Generate interaction stratifications for all pairs of variables
-    # -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-    
-    interaction_strats <- list()
-    
-    if (length(vars) >= 2) {
-        # All unique pairs
-        var_pairs <- combn(vars, 2, simplify = FALSE)
-        
-        # Interaction configurations: (n_groups_var1, n_groups_var2)
-        configs <- list(
-            "2x2" = c(2, 2),
-            "2x3" = c(2, 3),
-            "3x2" = c(3, 2),
-            "3x3" = c(3, 3)
-        )
-        
-        for (pair in var_pairs) {
-            v1 <- pair[1]
-            v2 <- pair[2]
-            
-            for (config_name in names(configs)) {
-                n1 <- configs[[config_name]][1]
-                n2 <- configs[[config_name]][2]
-                
-                strat_name <- paste0(v1, "_", v2, "_", config_name)
-                interaction_strats[[strat_name]] <- make_interaction_strata(
-                    var_data[[v1]], n1, v1,
-                    var_data[[v2]], n2, v2,
-                    z_vec = z_vec
-                )
-                if ( length( interaction_strats[[strat_name]] ) != n ) {
-                    interaction_strats[[strat_name]] <- NULL
-                }
-            }
-        }
-    }
-    
-    candidates <- c(single_strats, interaction_strats)
-    candidates <- Filter(Negate(is.null), candidates)
-    
-    return(candidates)
-}
-
-
 #' Evaluate a Candidate Stratification Variable
 #'
 #' Computes stratum-level residual statistics and heterogeneity metrics to 
@@ -435,7 +60,7 @@ evaluate_stratification <- function(data, strata_var, Z = "Z",
     
     data$strata_eval <- data[[strata_var]]
     data <- data %>% filter(!is.na(strata_eval))
-    if (nrow(dat) == 0) return(NULL)
+    if (nrow(data) == 0) return(NULL)
     
     if (!is.null(Z)) {
         data$Z <- data[[Z]]
@@ -533,16 +158,17 @@ evaluate_stratification <- function(data, strata_var, Z = "Z",
 #' summarized in a ranked table.
 #'
 #' @param data Data frame containing a \code{resid} column (residuals = Yobs - Yhat),
-#'   a treatment indicator column named \code{"Z"}, and any columns referenced
-#'   by the candidate stratifications.
+#'   a treatment indicator column, and any columns referenced by the candidate
+#'   stratifications.
 #' @param candidates Named list of candidate stratification vectors. Each element
 #'   should be a vector of the same length as \code{nrow(data)} containing stratum
 #'   assignments. Names are used to identify stratifications in the output.
-#' @param min_var_threshold Numeric. Minimum within-stratum residual variance
-#'   required. Stratifications with any stratum below this threshold are excluded
-#'   from results. Default is \code{0.01}.
+#' @param Z Character string. Name of the treatment indicator column in
+#'   \code{data}. Default is \code{"Z"}.
+#' @param ... Additional arguments passed to \code{\link{evaluate_stratification}}.
 #'
-#' @return A list of performance metrics for each stratification method
+#' @return A data frame of performance metrics for each stratification method,
+#'   sorted by promise.
 #' 
 #' @export
 compare_stratifications <- function(data, candidates, Z="Z", ...) {
@@ -598,27 +224,39 @@ compare_stratifications <- function(data, candidates, Z="Z", ...) {
 }
 
 
-#' Evaluate a candidate stratification strategy using pre-coding
-#' proxies
+
+
+#' Evaluate a candidate stratification before (full) coding
 #'
-#' Since we don't have residuals, we use proxies:
-#' - Variance of Yhat within strata (lower = more homogeneous predictions)
-#' - Spread of stratum means (higher = better potential for bias correction)
-#' - Balance of stratum sizes
+#' @description
+#' Two modes. Proxy mode (default; no outcome data needed): metrics based
+#' only on the predictions Yhat, with the spread of stratum-mean Yhat
+#' (\code{mean_spread}) as a proxy for the between-strata residual
+#' structure. Pilot mode (pass \code{Yobs} and pilot indicator \code{S}):
+#' additionally computes direct pilot estimates of the between-strata
+#' spread of mean residuals (\code{mean_spread_pilot}) and of the
+#' within-stratum residual variances, weighting cells by their
+#' FULL-population sizes. Pilot columns are NA when some stratum has too
+#' few pilot units to be evaluated (see \code{min_pilot_cell}).
 #'
-#' @param data Data frame with Yhat column
-#' @param strata Stratification vector
-#' @param Z Character string specifying the name of the treatment
-#'   indicator  or \code{NULL} to ignore treatment groups.
-#' @param Yhat Character string specifying the name of the column
-#'   containing predicted values (Yhat). Default is \code{"Yhat"}.
-#' @return Data frame with proxy quality metrics
+#' @param data Data frame with Yhat column.
+#' @param strata Stratification vector (or NULL if \code{data} contains a
+#'   \code{strata} column).
+#' @param Z Name of treatment indicator column, or NULL.
+#' @param Yhat Name of prediction column. Default "Yhat".
+#' @param Yobs Optional name of (or vector for) observed outcomes; only
+#'   pilot units need non-missing values. Enables pilot mode.
+#' @param S Optional name of (or vector for) the 0/1 pilot indicator.
+#'   Enables pilot mode.
+#' @return One-row data frame of proxy metrics, plus pilot-based metrics
+#'   when in pilot mode.
 #' @export
-evaluate_stratification_precoding <- function( data, strata=NULL, Z = "Z",
-                                               Yhat = "Yhat" ) {
+evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
+                                               Yhat = "Yhat",
+                                               Yobs = NULL, S = NULL ) {
     
-    if (is.null(Z)){
-        data$Z=1
+    if ( is.null(Z) ) {
+        data$Z = 1
     } else {
         data$Z = data[[Z]]
     }
@@ -626,23 +264,25 @@ evaluate_stratification_precoding <- function( data, strata=NULL, Z = "Z",
     data$Yhat = data[[Yhat]]
     
     # If strata provided as separate vector, add to data
-    if (!is.null(strata)) {
-        if (length(strata) == nrow(data)) {
+    if ( !is.null(strata) ) {
+        if ( length(strata) == nrow(data) ) {
             data$strata <- strata
         } else {
-            stop("Length of strata vector must match number of rows in data")
+            stop( "Length of strata vector must match number of rows in data" )
         }
     }
     
     # Ensure strata column exists
-    if (!"strata" %in% names(data)) {
-        stop("No strata column found. Provide strata as argument or include in data.")
+    if ( !"strata" %in% names(data) ) {
+        stop( "No strata column found. Provide strata as argument or include in data." )
     }
     
+    pilot_mode = !is.null(Yobs) && !is.null(S)
     
-    # Compute statistics by treatment arm and stratum
+    # ---- Proxy metrics (always computed) ----
+    
     strata_stats <- data %>%
-        group_by(Z, strata) %>%
+        group_by( Z, strata ) %>%
         summarise(
             N_zk = n(),
             mean_Yhat = mean(Yhat),
@@ -650,96 +290,130 @@ evaluate_stratification_precoding <- function( data, strata=NULL, Z = "Z",
             .groups = "drop"
         )
     
-    if (nrow(strata_stats) == 0) return(NULL)
+    if ( nrow(strata_stats) == 0 ) return( NULL )
     
-    # Summarize by treatment arm
-    arm_summary <- strata_stats %>% 
-        group_by(Z) %>%
-        mutate(N_z=sum(N_zk),
-               w_k = N_zk / N_z,
-               Yhat_bar_z=weighted.mean(mean_Yhat, w_k)) %>%
+    arm_summary <- strata_stats %>%
+        group_by( Z ) %>%
+        mutate( N_z = sum(N_zk),
+                w_k = N_zk / N_z,
+                Yhat_bar_z = weighted.mean(mean_Yhat, w_k) ) %>%
         summarise(
             N_z = sum(N_zk),
             n_strata = n(),
-            
-            # Stratum size balance (closer to 1 = more balanced)
             min_size = min(N_zk),
-            max_size=max(N_zk),
+            max_size = max(N_zk),
             size_ratio = max(N_zk) / min(N_zk),
-            
-            # Spread of stratum means (higher = more separation)
-            # This is a proxy for potential BS benefit
-            var_means = sum(w_k * (mean_Yhat - Yhat_bar_z)^2),
+            var_means = sum( w_k * (mean_Yhat - Yhat_bar_z)^2 ),
             range_means = max(mean_Yhat) - min(mean_Yhat),
-            
-            # Average within-stratum variance of Yhat
-            # Lower values suggest more homogeneous strata
-            avg_within_var = weighted.mean(var_Yhat,w_k),
-            sd_within_var=sqrt(sum(w_k * (var_Yhat - avg_within_var)^2))
+            avg_within_var = weighted.mean(var_Yhat, w_k),
+            sd_within_var = sqrt( sum( w_k * (var_Yhat - avg_within_var)^2 ) )
         )
     
-    # Overall summary (single row)
     overall <- tibble(
         n_strata = first(arm_summary$n_strata),
         min_stratum_size = min(arm_summary$min_size),
-        max_stratum_size=max(arm_summary$max_size),
+        max_stratum_size = max(arm_summary$max_size),
         avg_size_ratio = mean(arm_summary$size_ratio),
-        
-        # Proxy for BS benefit: spread of Yhat means across strata
-        # Higher values suggest LLM predictions differ systematically across strata
-        # which often correlates with systematic bias in residuals
         mean_spread = mean(arm_summary$var_means),
-        
-        # Proxy for within-stratum homogeneity
         avg_within_var_Yhat = mean(arm_summary$avg_within_var),
-        sd_within_var_Yhat=mean(arm_summary$sd_within_var),
-        
-        # Overall variance of Yhat (for computing R-squared proxy)
+        sd_within_var_Yhat = mean(arm_summary$sd_within_var),
         total_var_Yhat = var(data$Yhat),
-    ) 
+    )
     
-    return(overall)
+    # ---- Pilot metrics (optional) ----
+    
+    if ( pilot_mode ) {
+        data$Yobs = get_col_or_vector( data, Yobs )
+        data$S = get_col_or_vector( data, S )
+        stopifnot( all( data$S %in% c(0, 1) ) )
+        data$resid = data$Yobs - data$Yhat
+        
+        pilot_stats <- data %>%
+            group_by( Z, strata ) %>%
+            summarise(
+                N_zk = n(),
+                n_pilot = sum(S),
+                mean_resid = mean( resid[S == 1] ),
+                var_resid = var( resid[S == 1] ),
+                .groups = "drop"
+            )
+        
+        # Full-population weights; NA propagates when a stratum has too
+        # few pilot units, flagging the candidate as not pilot-evaluable.
+        pilot_arm <- pilot_stats %>%
+            group_by( Z ) %>%
+            mutate( N_z = sum(N_zk),
+                    w_k = N_zk / N_z,
+                    resid_bar_z = weighted.mean(mean_resid, w_k) ) %>%
+            summarise(
+                var_means_pilot = sum( w_k * (mean_resid - resid_bar_z)^2 ),
+                avg_within_var_pilot = weighted.mean(var_resid, w_k),
+                sd_within_var_pilot = sqrt( sum( w_k * (var_resid - avg_within_var_pilot)^2 ) ),
+                min_pilot = min(n_pilot),
+                n_pilot = sum(n_pilot),
+                .groups = "drop"
+            )
+        
+        overall <- overall %>%
+            mutate(
+                mean_spread_pilot = mean(pilot_arm$var_means_pilot),
+                avg_within_var_pilot = mean(pilot_arm$avg_within_var_pilot),
+                sd_within_var_pilot = mean(pilot_arm$sd_within_var_pilot),
+                min_pilot_cell = min(pilot_arm$min_pilot),
+                n_pilot = sum(pilot_arm$n_pilot)
+            )
+    }
+    
+    return( overall )
 }
 
-
-#' Compare candidate stratifications using pre-coding metrics
+#' Compare candidate stratifications before (full) coding
 #'
-#' @param data Data frame with Yhat and Z columns
-#' @param candidates Named list of stratification vectors
-#' @param Z Character string specifying the name of the treatment
-#'   indicator  or \code{NULL} to ignore treatment groups.
-#' @param Yhat Character string specifying the name of the column
-#'   containing predicted values (Yhat). Default is \code{"Yhat"}.
-#' @return Data frame comparing stratifications
+#' @description
+#' Applies \code{\link{evaluate_stratification_precoding}} to each
+#' candidate. In proxy mode (default) candidates are ranked by
+#' \code{mean_spread} (spread of stratum-mean Yhat). When pilot data are
+#' supplied via \code{Yobs} and \code{S}, candidates are ranked by
+#' \code{mean_spread_pilot} (pilot estimate of the between-strata spread
+#' of mean residuals), with non-pilot-evaluable candidates (NA) last.
+#'
+#' @inheritParams evaluate_stratification_precoding
+#' @param candidates Named list of stratification vectors.
+#' @return Data frame comparing stratifications, ranked best first.
 #' @export
-compare_stratifications_precoding <- function(data, candidates, Z=NULL,
-                                              Yhat = "Yhat" ) {
+compare_stratifications_precoding <- function( data, candidates, Z = NULL,
+                                               Yhat = "Yhat",
+                                               Yobs = NULL, S = NULL ) {
     
-    stopifnot( is.data.frame(data), 
+    stopifnot( is.data.frame(data),
                Yhat %in% colnames(data),
-               all( sapply(candidates, length) == nrow(data)),
-               (is.null(Z) || Z %in% names(data)) )
+               all( sapply(candidates, length) == nrow(data) ),
+               ( is.null(Z) || Z %in% names(data) ) )
     
+    pilot_mode = !is.null(Yobs) && !is.null(S)
     
-    results <- purrr::map_dfr(names(candidates), function(cname) {
+    results <- purrr::map_dfr( names(candidates), function(cname) {
         
         strata <- candidates[[cname]]
         
-        metrics <- evaluate_stratification_precoding(data, strata, Z=Z, Yhat = Yhat)
+        metrics <- evaluate_stratification_precoding( data, strata, Z = Z,
+                                                      Yhat = Yhat,
+                                                      Yobs = Yobs, S = S )
         metrics %>%
-            mutate(stratification = cname, .before = 1)
+            mutate( stratification = cname, .before = 1 )
     })
     
-    if (nrow(results) == 0) {
-        warning("No valid stratifications found")
-        return(NULL)
+    if ( nrow(results) == 0 ) {
+        warning( "No valid stratifications found" )
+        return( NULL )
     }
     
-    # Rank by variance of strata means
-    results %>%
-        arrange(desc(mean_spread))
+    if ( pilot_mode ) {
+        results %>% arrange( desc(mean_spread_pilot) )   # NAs sort last
+    } else {
+        results %>% arrange( desc(mean_spread) )
+    }
 }
-
 
 #' Compute variance decomposition (BS and WS components)
 #'
@@ -1452,5 +1126,4 @@ plot_decomposition_comparison <- function(decomposition_result, top_n = NULL,
     
     return(p)
 }
-
 

@@ -4,3 +4,12 @@
 ^\.positai$
 ^\.claude$
 ^data-raw$
+^Barbera2020$
+^misc$
+^results/old$
+^todo$
+^old$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.github$

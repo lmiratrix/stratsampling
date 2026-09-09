@@ -3,14 +3,29 @@ library(janitor)
 library(broom)
 library(scales)
 library(gt)
-
+# Canonical method ordering (single source of truth for factor levels)
+method_levels <- c(
+    "Subset",
+    "SRS",
+    "Stratified",
+    "Stratified-Random",
+    "Optimal",
+    "Optimal-Permuted",
+    "Optimal-Random",
+    "Optimal-Reversed",
+    "Full coding"
+)
 
 # A consistent color palette for methods
 method_pal <- c(
     "Subset"      = "black", #"#9467bd",
     "SRS"         = "#228222",
     "Stratified"  = "#1f77b4",
+    "Stratified-Random" = "purple3",
     "Optimal"     = "#ff6961",
+    "Optimal-Permuted"  = "#e6842a",
+    "Optimal-Random"  = "#8c1a11",
+    "Optimal-Reversed" = "goldenrod",
     "Full coding" = "black"
 )
 
@@ -19,6 +34,10 @@ method_shapes <- c(
     "SRS"         = 16,
     "Stratified"  = 17,
     "Optimal"     = 15,
+    "Stratified-Random" = 2,
+    "Optimal-Permuted"  = 0,
+    "Optimal-Random" = 7,
+    "Optimal-Reversed"  = 7,
     "Full coding" = 8
 )
 
@@ -28,6 +47,10 @@ method_linetypes <- c(
     "SRS"         = "solid",
     "Stratified"  = "dashed",
     "Optimal"     = "longdash",
+    "Stratified-Random" = "twodash",
+    "Optimal-Permuted"  = "42",
+    "Optimal-Random" = "4212",
+    "Optimal-Reversed"  = "4212",
     "Full coding" = "dotdash"
 )
 
@@ -68,9 +91,10 @@ R2_target = c("0.4"= "R² target = 0.4",
 #    Two slices: R2 = 0.85 and R2 = 0.40; small-multiples by residual variance.
 # -------------------------------
 make_frontier_plot <- function(df, r2_val = NULL, facet = "bias~residual_var",
-                               bias_vals = NULL, oracle_ref = FALSE, smooth = FALSE) {
+                               bias_vals = NULL, oracle_ref = FALSE, smooth = FALSE,
+                               methods = c("Subset", "SRS", "Stratified", "Optimal")) {
     d <- df %>%
-        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+        filter(method %in% methods)
     
     if (!is.null(bias_vals)) {
         d <- d %>% filter(bias %in% bias_vals)
@@ -136,10 +160,11 @@ make_frontier_plot <- function(df, r2_val = NULL, facet = "bias~residual_var",
 
 
 make_delta_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
-                            bias_vals = NULL, smooth = FALSE) {
+                            bias_vals = NULL, smooth = FALSE,
+                            methods=c("Stratified", "Optimal")) {
     base <- df %>%
-        filter(method %in% c("Stratified", "Optimal")) %>%
-        mutate(method = fct_relevel(method, "Stratified", "Optimal")) %>%
+        filter(method %in% methods) %>%
+        #mutate(method = fct_relevel(method, "Stratified", "Optimal")) %>%
         select(all_of(cell_keys), method, pct_var_red_vs_SRS)
     
     if (!is.null(bias_vals)) {
@@ -170,16 +195,15 @@ make_delta_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
     
     # Apply colorblind-friendly scales
     g <- g +
-        scale_color_manual(name = "Method", values = method_pal,
-                           labels = c("Proportional Allocation", "Optimal Allocation")) +
-        scale_shape_manual(name = "Method", values = method_shapes,
-                           labels = c("Proportional Allocation", "Optimal Allocation")) +
-        scale_linetype_manual(name = "Method", values = method_linetypes,
-                              labels = c("Proportional Allocation", "Optimal Allocation")) +
+        scale_color_manual(name = "Method", values = method_pal) +
+        scale_shape_manual(name = "Method", values = method_shapes) +
+        scale_linetype_manual(name = "Method", values = method_linetypes) +
         scale_x_continuous(breaks = seq(0, 1, by = 0.2),
                            labels = percent_format(accuracy = 1), limits = c(0.05, 0.95)) +
-        scale_y_continuous(breaks = seq(-10, 80, by = 20),
-                           labels = percent_format(scale = 1), limits = c(-10, 85)) +
+        scale_y_continuous(breaks = seq(-100, 100, by = 20),oob=scales::squish,
+                           labels = percent_format(scale = 1)
+                           , #limits = c(-10, 85)
+                           )+
         xlab("Proportion coded") +
         ylab("% Reduction in Empirical Variance vs. SRS") +
         ggtitle(glue::glue("Incremental value of stratified sampling vs SRS (R-squared target = {r2_val})")) +
@@ -231,9 +255,10 @@ make_heatmap = function(dat, r2_val, fixed_budget) {
 
 
 
-make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL,
+                                 methods=c("Subset", "SRS", "Stratified", "Optimal", "Full coding")) {
     d <- df %>%
-        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal", "Full coding"))
+        filter(method %in% methods)
     
     title <- "Variance inflation vs full coding"
     
@@ -270,9 +295,10 @@ make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
 
 
 
-make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL,
+                               methods= c("Subset", "SRS", "Stratified", "Optimal")) {
     d <- df %>%
-        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+        filter(method %in% methods)
     
     if (!is.null(bias_vals)) {
         d <- d %>% filter(bias %in% bias_vals)
@@ -300,9 +326,10 @@ make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, b
 }
 
 
-make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL) {
+make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL,
+                           method= c("Subset", "SRS", "Stratified", "Optimal")) {
     d <- df %>%
-        filter(method %in% c("Subset", "SRS", "Stratified", "Optimal"))
+        filter(method %in% methods)
     
     if (!is.null(bias_vals)) {
         d <- d %>% filter(bias %in% bias_vals)

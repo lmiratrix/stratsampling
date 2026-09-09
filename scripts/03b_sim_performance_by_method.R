@@ -3,22 +3,36 @@ library(broom)
 library(patchwork)
 
 
+# A consistent color palette for methods
 method_pal <- c(
-    "Subset"      = "#9467bd",
-    "SRS"         = "#2ca02c",
+    "Subset"      = "slategray2",
+    "SRS"         = "#228222",
     "Stratified"  = "#1f77b4",
+    "Stratified-Random" = "purple3",
     "Optimal"     = "#ff6961",
+    "Optimal-Permuted"  = "#e6842a",
+    "Optimal-Random"  = "#8c1a11",
+    "Optimal-Reversed" = "goldenrod",
     "Full coding" = "black"
+)
+
+method_levels <- c(
+    "Subset",
+    "SRS",
+    "Stratified",
+    "Stratified-Random",
+    "Optimal",
+    "Optimal-Random",
+    "Full coding"
 )
 
 
 # Load simulation results
-results1=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_exact_strata.rds")
-results2=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_approx_strata.rds")
-results3=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_unbalanced_strata.rds")
+results1=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_exact_strata_all.rds")
+results2=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_approx_strata_all.rds")
+results3=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_unbalanced_strata_all.rds")
 
 results=rbind(results1,results2,results3)
-results$method[results$method=="Stratified-Opt"]="Optimal"
 
 
 
@@ -28,7 +42,7 @@ results_oracle <- readRDS("results/sim_results_oracle.rds")
 
 # Combine and prepare data
 dat_sim <- results %>%
-    filter(method %in% c("SRS", "Stratified", "Optimal")) %>%
+    filter(method %in% method_levels) %>%
     group_by(method, N, n_code, n_strat, strata_config, tau, bias, 
              residual_var, pop.sd, R2_target) %>%
     summarise(
@@ -40,7 +54,7 @@ dat_sim <- results %>%
     mutate(
         log_emp_SE = log(emp_SE),
         coding_frac = n_code / N,
-        method = factor(method, levels = c("SRS", "Stratified", "Optimal")),
+        method = factor(method, levels=method_levels),
         bias = factor(bias, levels = c("none", "small", "moderate", "large", "extreme-contrast")),
         residual_var = factor(residual_var, levels = c("homogeneous", "heterogeneous", "extreme-contrast")),
         R2_target = factor(R2_target),
@@ -174,7 +188,7 @@ importance_main <- map_dfr(models_main, calc_variable_importance)
 # Print top 10 most important variables for each method
 importance_all %>%
     group_by(method) %>%
-    slice_max(abs_std_coefficient, n = 10) %>%
+    slice_max(abs_std_coefficient, n = 5) %>%
     select(method, term_clean, std_coefficient, abs_std_coefficient) %>%
     print(n = 30)
 
@@ -251,7 +265,10 @@ ggsave("figures/variable_importance_by_method.pdf", p_combined,
 
 
 #' Coefficient plot showing effect direction with confidence intervals
-plot_coefficients_comparison <- function(importance_df, top_n = NULL) {
+plot_coefficients_comparison <- function(importance_df, top_n = NULL,
+                                         methods=c("SRS","Stratified","Optimal")) {
+    
+    importance_df = importance_df %>% filter(method %in% methods)
     
     # Get top variables across all methods
     top_vars <- importance_df %>%
@@ -318,6 +335,13 @@ print(p_comparison)
 ggsave("figures/coefficient_comparison_with_CI.pdf", 
        p_comparison, width = 8, height = 8)
 
+p2 <- plot_coefficients_comparison(importance_all,top_n=20,methods=c("SRS","Stratified","Stratified-Random"))
+print(p2)
+
+
+p3<- plot_coefficients_comparison(importance_all,top_n=20,methods=c("SRS","Optimal","Optimal-Permuted","Optimal-Reversed"))
+print(p3)
+
 
 p_comparison_main <- plot_coefficients_comparison(importance_main)
 p_comparison_main
@@ -328,7 +352,9 @@ ggsave("figures/coefficient_comparison_with_CI_main_effects_only.pdf",
 
 
 #' Alternative version: separate panels for clearer visualization
-plot_coefficients_comparison_faceted <- function(importance_df,top_n=NULL) {
+plot_coefficients_comparison_faceted <- function(importance_df,top_n=NULL, methods=c("SRS","Stratified","Optimal")) {
+    
+    importance_df = importance_df %>% filter(method %in% methods)
     
     # Get top variables across all methods
     top_vars <- importance_df %>%
@@ -352,7 +378,7 @@ plot_coefficients_comparison_faceted <- function(importance_df,top_n=NULL) {
         geom_errorbarh(aes(xmin = ci_lower, xmax = ci_upper),
                        height = 0.3, alpha = 0.5, linewidth = 0.8) +
         geom_point(size = 3, alpha = 0.8) +
-        facet_wrap(~method, ncol = 1, scales = "free_x") +
+        facet_wrap(~method,scales = "free_x") +
         scale_color_manual(values = c("Significant" = "#d7191c", "Not Significant" = "grey60"),
                            name = "Statistical Significance") +
         labs(
@@ -372,7 +398,7 @@ plot_coefficients_comparison_faceted <- function(importance_df,top_n=NULL) {
         )
 }
 
-p_comparison_faceted <- plot_coefficients_comparison_faceted(importance_all,top_n=10)
+p_comparison_faceted <- plot_coefficients_comparison_faceted(importance_all,top_n=10, methods=c("SRS","Stratified","Stratified-Random","Optimal","Optimal-Reversed"))
 print(p_comparison_faceted)
 
 ggsave("figures/coefficient_comparison_faceted.pdf", p_comparison_faceted,
@@ -427,3 +453,4 @@ coef_table %>%
     cat(file = "tables/coefficient_comparison_table.tex")
 
 print(coef_table)
+

@@ -12,7 +12,7 @@ test_that("DGP works", {
   expect_true( is.data.frame(pop) )
   expect_true( all( c("strata","ID", "Yobs", "Yhat", "Z" ) %in% colnames(pop) ) )
   
-  S = generate_sample_index( pop, n_code=6, strata="strata", seed=123 )
+  S = generate_sample_index( pop, n_code=8, Z="Z", strata="strata", seed=123 )
   expect_true( is.numeric(S) )
   expect_equal( length(S), nrow(pop) )
   sum(S)

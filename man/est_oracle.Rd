@@ -2,13 +2,31 @@
 % Please edit documentation in R/est_functions.R
 \name{est_oracle}
 \alias{est_oracle}
-\title{Compute oracle estimate (full coding) using shared functions}
+\title{Oracle Estimate (Full Coding Benchmark)}
 \usage{
 est_oracle(data, Yobs = "Yobs", Z = "Z")
 }
+\arguments{
+\item{data}{Data frame containing at minimum the outcome column.}
+
+\item{Yobs}{Name of the observed outcome column, or a numeric vector.
+Default is \code{"Yobs"}.}
+
+\item{Z}{Name of the treatment indicator column, or \code{NULL} for
+estimating a population mean. Default is \code{"Z"}.}
+}
 \value{
-Data frame with oracle estimate and SE
+A data frame with columns \code{method}, \code{est} (point estimate),
+and \code{SE} (standard error).
 }
 \description{
-Compute oracle estimate (full coding) using shared functions
+Computes the treatment effect estimate assuming all units have been
+human-coded. This serves as a benchmark for evaluating the
+efficiency of subsampling designs.
+}
+\examples{
+data(toy_data_coded)
+# Oracle is usually computed on fully-coded data
+# est_oracle(full_data, Yobs = "Yobs", Z = "Tx")
+
 }

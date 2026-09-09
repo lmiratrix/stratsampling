@@ -2,8 +2,7 @@
 % Please edit documentation in R/dat_gen_functions.R
 \name{generate_population}
 \alias{generate_population}
-\title{Generate a population with strata and outcomes and
-surrogate/predicted outcomes that depend on strata.}
+\title{Generate a Simulated Population with Surrogate Scores}
 \usage{
 generate_population(
   N,
@@ -16,16 +15,85 @@ generate_population(
   R2_target = 0.5,
   no_tx = FALSE,
   rescale_v = TRUE,
-  seed = NULL,
-  oracle = TRUE
+  seed = NULL
 )
 }
 \arguments{
-\item{no_tx}{If TRUE, do not generate treatment assignment (Z) and
-set all outcomes to control potential outcome.}
+\item{N}{Integer. Total population size.}
+
+\item{n_strat}{Integer. Number of strata to create within each
+treatment arm.}
+
+\item{strata_config}{Character. How to allocate units across
+strata: \code{"balanced-exact"} (equal sizes, requires N
+divisible by n_strat), \code{"balanced-approx"} (approximately
+equal via random assignment), or \code{"unbalanced"} (random
+proportions).}
+
+\item{tau}{Numeric. Constant additive treatment effect. Default is
+0 (no treatment effect).}
+
+\item{bias}{Character. Level of systematic prediction bias across
+strata: \code{"none"}, \code{"small"} (up to 25\% of sd_y),
+\code{"moderate"} (up to 50\%), \code{"large"} (up to 100\%), or
+\code{"extreme-contrast"} (bias concentrated in two strata).}
+
+\item{residual_var}{Character. Pattern of residual variance across
+strata: \code{"homogeneous"} (equal variance),
+\code{"heterogeneous"} (linearly increasing), or
+\code{"extreme-contrast"} (one very high, one very low).}
+
+\item{sd_y}{Numeric. Standard deviation of the outcome variable.
+Default is 3.}
+
+\item{R2_target}{Numeric between 0 and 1. Target R-squared for the
+surrogate predictions. Controls overall prediction quality.
+Default is 0.5.}
+
+\item{no_tx}{Logical. If \code{TRUE}, do not generate treatment
+assignment; all units receive control potential outcomes. Useful
+for single-arm designs. Default is \code{FALSE}.}
+
+\item{rescale_v}{Logical. If \code{TRUE}, rescale residual
+variances to preserve the target R-squared exactly. Default is
+\code{TRUE}.}
+
+\item{seed}{Optional integer seed for reproducibility.}
+}
+\value{
+A data frame with columns:
+\describe{
+\item{Z}{Treatment indicator (0 = control, 1 = treated)}
+\item{strata}{Stratum assignment (integer 1 to n_strat)}
+\item{ID}{Unique unit identifier}
+\item{Y0}{Control potential outcome}
+\item{Y1}{Treated potential outcome (Y0 + tau)}
+\item{Yobs}{Observed outcome under assigned treatment}
+\item{Yhat}{Surrogate prediction (Yobs + stratum-specific noise)}
+}
 }
 \description{
-These strata are generated post-treatment, in that we generate
-n_strat strata within the treated and control units separately, and
-then generate outcomes.
+Creates a simulated population with potential outcomes, treatment
+assignment, and surrogate predictions (Yhat) that exhibit
+configurable levels of bias and residual variance heterogeneity
+across strata. This is the primary data-generating function for
+simulation studies comparing stratified vs. SRS sampling designs.
+}
+\details{
+Strata are generated post-treatment: \code{n_strat} strata are
+created within treated and control units separately, and surrogate
+noise (bias + residual) is added within each stratum.
+}
+\examples{
+dat <- generate_population(N = 400, n_strat = 4, tau = 0.5,
+                           bias = "moderate",
+                           residual_var = "heterogeneous",
+                           R2_target = 0.7, seed = 42)
+head(dat)
+table(dat$strata, dat$Z)
+
+}
+\seealso{
+\code{\link{describe_population}} for summarizing the DGP,
+\code{\link{generate_observed_sample}} for drawing a subsample.
 }

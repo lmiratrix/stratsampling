@@ -1,0 +1,9 @@
+url: https://lmiratrix.github.io/stratsampling/
+articles:
+- title: Articles
+  navbar: ~
+  contents:
+  - package_overview
+  - simulation_framework
+  - applied_analysis
+

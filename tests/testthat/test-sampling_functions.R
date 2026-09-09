@@ -3,7 +3,7 @@ library( tidyverse )
 
 test_that("the sampling function executes", {
   
-  dta = generate_population(N=200, n_strat=4, oracle=FALSE )
+  dta = generate_population(N=200, n_strat=4, )
   head( dta )
   
   #debug( generate_sample_index )
@@ -94,7 +94,7 @@ test_that("Sample index by strata works", {
 
 test_that("the optimal allocation sampling functions work", {
   
-  dta = generate_population(N=1000, n_strat=4, oracle=FALSE ) %>%
+  dta = generate_population(N=1000, n_strat=4, ) %>%
     dplyr::rename( ZZ = Z,
             SS = strata )
   
@@ -149,7 +149,7 @@ test_that("the optimal allocation sampling functions work", {
 test_that("weight calculations work", {
   
   
-  dta = generate_population(N=30, n_strat=3, oracle=FALSE ) %>%
+  dta = generate_population(N=30, n_strat=3, ) %>%
     dplyr::rename( ZZ = Z,
             SS = strata )
   dta

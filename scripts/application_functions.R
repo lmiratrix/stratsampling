@@ -76,16 +76,27 @@ calc_oracle_variance = function(dat, method = c("SRS", "Stratified-Prop", "Strat
 #' @param finite_pop Should finite population correction be applied?
 #' @param seed Random seed for reproducibility
 #' @return Data frame with estimates from all methods plus oracle
-compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, finite_pop=FALSE, seed = NULL) {
+compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, finite_pop=FALSE, pilot_frac = NULL, seed = NULL,
+                                           pilot_select=FALSE,...) {
     
     if (!is.null(seed)) set.seed(seed)
 
     N = nrow(dat)
+    if (!is.null(Z)){
     n_code = round(coding_fraction * N / 2) * 2  # Ensure even split
+    }
+    else{
+        n_code=round(coding_fraction*N)
+    }
     
     # Run one iteration of all methods using the shared simulation function
-    results = one_iter_all(dat, n_code = n_code, Z = Z, finite_pop = finite_pop)
+    results = one_iter_all(dat, n_code = n_code, Z = Z, finite_pop = finite_pop, pilot_frac = pilot_frac)
     
+    if (pilot_select){
+        pilot_select_results=one_iter_pilot_select(dat,n_code=n_code,Z="Z",...)
+        results=full_join(results,pilot_select_results)
+        
+    }
     # Add oracle for comparison
     oracle_est = est_oracle(dat,Z=Z)
     
@@ -115,12 +126,12 @@ compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, f
 #' @param seed Base random seed
 #' @return Data frame with estimates from all samples
 compute_multiple_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, 
-                                              n_samples = 10, finite_pop=FALSE, seed=NULL) {
+                                              n_samples = 10, finite_pop=FALSE, pilot_frac = NULL, seed=NULL,...) {
     
     if (!is.null(seed)) set.seed(seed)
     
     results = purrr::map_dfr(1:n_samples, function(i) {
-        compute_single_sample_estimates(dat, Z=Z, coding_fraction=coding_fraction, finite_pop=finite_pop) %>%
+        compute_single_sample_estimates(dat, Z=Z, coding_fraction=coding_fraction, finite_pop=finite_pop, pilot_frac=pilot_frac,...) %>%
             mutate(sample_id = i)
     })
     
@@ -143,7 +154,9 @@ create_forest_plot = function(estimates, oracle_est = NULL, tx=TRUE) {
     xlab_name = ifelse(tx, "Estimated Treatment Effect (Effect Size Units)", "Estimated Mean")
     
     # Order methods logically
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Opt")
+    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                     "Stratified-PilotSelect","Optimal-PilotSelect")
     estimates = estimates %>%
         mutate(method = factor(method, levels = rev(method_order)))
     
@@ -194,7 +207,9 @@ create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, t
     
     
     # Order methods logically
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Opt")
+    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                     "Stratified-PilotSelect","Optimal-PilotSelect")
     
     # Separate oracle (only need one) from other methods
     oracle_data = multi_estimates %>%
@@ -290,7 +305,11 @@ create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, t
 #' @return Formatted data frame
 create_comparison_table = function(estimates) {
     
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Opt")
+    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal",
+                     "Stratified-Random",
+                     "Optimal-Permuted","Optimal-Reversed",  "Optimal-Random",
+                     "Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                     "Stratified-PilotSelect","Optimal-PilotSelect")
     
     oracle_se = estimates$SE[estimates$method == "Oracle"]
     
@@ -324,7 +343,9 @@ create_comparison_table = function(estimates) {
 #' @return Summary data frame
 create_multi_sample_summary = function(multi_estimates) {
     
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Opt")
+    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                     "Stratified-PilotSelect","Optimal-PilotSelect")
     
     oracle_data = multi_estimates %>%
         filter(method == "Oracle") %>%
@@ -363,3 +384,9 @@ create_multi_sample_summary = function(multi_estimates) {
         mutate(across(where(is.numeric), ~round(., 3)))
 }
 
+label_below_caption <- function(tex, label) {
+    tex <- as.character(tex)
+    sub("(?m)^(\\\\caption\\{.*\\})[ \t]*$",
+        paste0("\\1\n\\\\label{tab:", label, "}"),
+        tex, perl = TRUE)
+}

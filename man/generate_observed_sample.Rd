@@ -2,7 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{generate_observed_sample}
 \alias{generate_observed_sample}
-\title{Generate observed dataset for simulation}
+\title{Generate Observed Dataset for Simulation}
 \usage{
 generate_observed_sample(
   dat,
@@ -14,18 +14,45 @@ generate_observed_sample(
 )
 }
 \arguments{
-\item{n_code}{Number to code.  If single number, will roughly split
-across all strata under stratified proportional to the strata
-sizes.  If a vector of length strata, will code that many in each
-strata (ignoring treatment assignment unless by_tx=TRUE).  For
-srs, will sample ignoring treatment assignment unless by_tx =
-TRUE}
+\item{dat}{Data frame containing the population.}
 
-\item{strata}{Name of stratification to use.  If null will do SRS.}
+\item{n_code}{Sample size specification. If a single number, units
+are allocated proportionally across strata (and treatment arms if
+\code{Z} is specified). If a vector matching the number of
+strata-by-treatment cells, specifies exact counts per cell.}
+
+\item{Z}{Character string naming the treatment indicator column, or
+\code{NULL} to ignore treatment assignment. When specified,
+sampling is done within substrata defined by crossing strata with
+treatment. Default is \code{NULL}.}
+
+\item{strata}{Character string naming the stratification column, or
+\code{NULL} for SRS (all units in one stratum). Default is
+\code{NULL}.}
+
+\item{by_tx}{Logical. If \code{TRUE}, sample separately within
+treatment arms. Default is \code{FALSE}.}
+
+\item{seed}{Optional integer seed for reproducibility.}
+}
+\value{
+The input data frame with two additional/modified columns:
+\describe{
+\item{S}{Sampling indicator (1 = coded, 0 = not coded)}
+\item{Yobs}{Observed outcome; set to \code{NA} for unsampled units}
+}
 }
 \description{
-Given a fully observed population, sample and generate observed
-outcomes, given possibly stratification, etc.  This method would be
-used for simulation, and could not be used in actual empirical work
-(as the full set of human codes would not exist)
+Wrapper around \code{\link{generate_sample_index}} that draws a
+(stratified) sample and sets unsampled outcomes to \code{NA}. This
+simulates the real-world scenario where only a subsample of units
+receives human coding.
+}
+\details{
+This function is intended for simulation studies only; it requires
+fully observed outcomes for the entire population.
+}
+\seealso{
+\code{\link{generate_sample_index}},
+\code{\link{generate_population}}
 }

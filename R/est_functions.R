@@ -1,6 +1,23 @@
-#' Compute oracle estimate (full coding) using shared functions
-#' @return Data frame with oracle estimate and SE
-#' 
+#' Oracle Estimate (Full Coding Benchmark)
+#'
+#' Computes the treatment effect estimate assuming all units have been
+#' human-coded. This serves as a benchmark for evaluating the
+#' efficiency of subsampling designs.
+#'
+#' @param data Data frame containing at minimum the outcome column.
+#' @param Yobs Name of the observed outcome column, or a numeric vector.
+#'   Default is `"Yobs"`.
+#' @param Z Name of the treatment indicator column, or `NULL` for
+#'   estimating a population mean. Default is `"Z"`.
+#'
+#' @return A data frame with columns `method`, `est` (point estimate),
+#'   and `SE` (standard error).
+#'
+#' @examples
+#' data(toy_data_coded)
+#' # Oracle is usually computed on fully-coded data
+#' # est_oracle(full_data, Yobs = "Yobs", Z = "Tx")
+#'
 #' @export
 est_oracle <- function(data, Yobs = "Yobs", Z="Z") {
     data$Yobs = get_col_or_vector(data, Yobs)
@@ -35,21 +52,38 @@ est_oracle <- function(data, Yobs = "Yobs", Z="Z") {
 }
 
 
-#' Simple subset coding estimator
+#' Simple Subset Estimator (Baseline)
 #'
-#' This is the (Baseline) function to calculate tau_hat_subset (the
-#' simple subset treatment effect estimator) assuming we have
-#' human-coded scores, Yobs, for a subsample of n<N chosen using SRS
+#' Computes the naive difference-in-means treatment effect estimator
+#' using only the human-coded subsample, ignoring surrogate scores
+#' entirely. This is the baseline estimator that the model-assisted
+#' estimators aim to improve upon.
 #'
-#' @return A data.frame with columns:
-#' \item{est}{the point estimate}
-#' \item{SE}{The SE of the estimator if everything were coded}
-#' \item{SEhat}{the estimated standard error of the estimator}
-#' \item{SEhat.full}{NA (not applicable for this estimator)}
-#' \item{SEhat.samp}{NA (not applicable for this estimator)}
-#' \item{S2.0}{the sample variance of the coded outcomes in the control group}
-#' \item{S2.1}{the sample variance of the coded outcomes in the treatment group}
-#' 
+#' @param data Data frame containing at minimum the outcome, sampling
+#'   indicator, and treatment columns.
+#' @param Yobs Name of the observed outcome column, or a numeric vector.
+#'   Default is `"Yobs"`.
+#' @param S Name of the sampling indicator column (1 = coded, 0 = not
+#'   coded), or a numeric vector. Default is `"S"`.
+#' @param Z Name of the treatment indicator column, or `NULL` for
+#'   estimating a population mean. Default is `"Z"`.
+#' @param finite_pop Logical. If `TRUE`, applies a finite population
+#'   correction. Default is `FALSE`.
+#'
+#' @return A data frame with columns:
+#' \describe{
+#'   \item{est}{Point estimate of the treatment effect (or mean).}
+#'   \item{SE}{Oracle SE (computed using full population variance).}
+#'   \item{SEhat}{Estimated SE from the coded subsample.}
+#'   \item{SEhat.full}{`NA` (not applicable for this estimator).}
+#'   \item{SEhat.samp}{`NA` (not applicable for this estimator).}
+#'   \item{S2.0, S2.1}{Sample variance of coded outcomes in control
+#'     and treatment groups, respectively.}
+#' }
+#'
+#' @seealso [est_ma_srs()] and [est_ma_strat()] for model-assisted
+#'   alternatives that leverage surrogate scores.
+#'
 #' @export
 est_subset = function( data, Yobs = "Yobs",
                        S = "S", Z = "Z", finite_pop=FALSE ) {
@@ -127,28 +161,54 @@ est_subset = function( data, Yobs = "Yobs",
 
 
 
-#' Calculate treatment impacts with stratified sample
+#' Model-Assisted Stratified Estimator
 #'
-#' Function to calculate the model-assisted treatment effect estimator
-#' assuming we have K fixed strata and hand-coded scores for a
-#' subsample of n<N documents chosen by stratified random sampling
-#' (with fixed and known sampling probabilities).
-#' 
-#' If strata set to null, then do the SRS version.
-#' 
-#' @return A data.frame with columns:
-#' \item{est}{the point estimate}
-#' \item{SE}{Not sure what this is.}
-#' \item{SEhat}{the estimated standard error of the estimator}
-#' \item{SEhat.full}{the estimated standard error component due to full coding variance
-#' (i.e., if we had coded everything)}
-#' \item{SEhat.samp}{the estimated standard error component due to sampling variance
-#' (i.e., due to only coding a subset of documents) HOW DIFFERENT FROM SEhat?}
-#' \item{S2.0}{the estimated population variance of the outcomes in the
-#' control group}
-#' \item{S2.1}{the estimated population variance of the outcomes in the
-#' treatment group}
-#' 
+#' Computes the model-assisted treatment effect estimator that combines
+#' surrogate predictions for the full population with a bias correction
+#' from a human-coded stratified subsample. Within each treatment arm
+#' and stratum, the estimator adjusts the population mean of surrogate
+#' scores by the average residual (human score minus surrogate) in the
+#' coded units, weighted by stratum sizes.
+#'
+#' If `strata` is set to `NULL`, this reduces to the SRS model-assisted
+#' estimator (equivalent to calling [est_ma_srs()]).
+#'
+#' @param data Data frame containing outcome, surrogate, sampling
+#'   indicator, treatment, and stratification columns.
+#' @param Yhat Name of the surrogate score column. Default is `"Yhat"`.
+#' @param Yobs Name of the human-coded outcome column. Default is
+#'   `"Yobs"`.
+#' @param S Name of the sampling indicator column (1 = coded, 0 = not
+#'   coded). Default is `"S"`.
+#' @param Z Name of the treatment indicator column, or `NULL` for a
+#'   population mean. Default is `"Z"`.
+#' @param strata Name of the stratification column, or `NULL` for
+#'   unstratified (SRS) estimation. Default is `"strata"`.
+#' @param return_pieces Logical. If `TRUE`, returns a list with
+#'   intermediate quantities useful for diagnostics. Default is `FALSE`.
+#' @param finite_pop Logical. If `TRUE`, applies finite population
+#'   corrections and returns only the sampling variance component.
+#'   Default is `FALSE`.
+#'
+#' @return A data frame with columns:
+#' \describe{
+#'   \item{est}{Point estimate of the treatment effect (or mean).}
+#'   \item{SE}{Oracle SE computed using true residual variances for all
+#'     units.}
+#'   \item{SEhat}{Estimated SE from the coded subsample, combining both
+#'     the full-coding and sampling variance components.}
+#'   \item{SEhat.full}{Estimated SE component attributable to treatment
+#'     effect variability (i.e., variance even if all units were coded).}
+#'   \item{SEhat.samp}{Estimated SE component attributable to
+#'     subsampling (i.e., additional variance from coding only a subset).}
+#'   \item{S2.0, S2.1}{Estimated population variance of outcomes in
+#'     control and treatment groups.}
+#' }
+#'
+#' @seealso [est_ma_srs()] for the unstratified version,
+#'   [est_subset()] for the baseline estimator, and
+#'   [generate_sample_index()] for drawing stratified samples.
+#'
 #' @export
 est_ma_strat = function(data = NULL,
                         Yhat = "Yhat", Yobs ="Yobs",
@@ -295,12 +355,18 @@ est_ma_strat = function(data = NULL,
 
 
 
-#' Calculate treatment impacts with SRS sample
-#' 
-#' (Baseline) function to calculate tau_hat_ma (the model-assisted
-#' treatment effect estimator) assuming we have human-coded scores,
-#' Yobs, for a subsample of n<N documents plus predicted scores for all
-#' N documents, with the subsample chosen using SRS
+#' Model-Assisted SRS Estimator
+#'
+#' Computes the model-assisted treatment effect estimator using a
+#' simple random subsample (no stratification). This is a convenience
+#' wrapper around [est_ma_strat()] with `strata = NULL`.
+#'
+#' @inheritParams est_ma_strat
+#'
+#' @return A data frame with the same structure as [est_ma_strat()].
+#'
+#' @seealso [est_ma_strat()] for the stratified version,
+#'   [est_subset()] for the baseline estimator.
 #'
 #' @export
 est_ma_srs = function(data,
@@ -504,85 +570,8 @@ estimate_R2 <- function(data = NULL,
 
 
 
-if ( FALSE ) {
-  plot_power_curve( 1000, p=0.5, var_Y0=1, R2_ML=0.7, R2_strat=0.2 )
-  
-  plot_power_curve( 1000, p=0.5, var_Y0=1, R2_ML=0.7, R2_strat=0.5 )
-  plot_power_curve( 1000, p=0.5, var_Y0=1, R2_ML=0.7, R2_strat=0 )
-  
-}
 
 
 
-
-# Old code ----
-
-
-#' (Baseline) function to calculate tau_hat_ma (the model-assisted
-#' treatment effect estimator) assuming we have human-coded scores,
-#' Yobs, for a subsample of n<N documents plus predicted scores for all
-#' N documents, with the subsample chosen using SRS
-#' 
-#' This function was replaced.
-#'
-#' @noRd
-est_ma_srs_old = function(data,
-                          Yhat = "Yhat", Yobs = "Yobs",
-                          S = "S", Z = "Z",
-                          return_pieces = FALSE) {
-  
-  data$Yhat = get_col_or_vector(data, Yhat)
-  data$Yobs = get_col_or_vector(data, Yobs)
-  data$S    = get_col_or_vector(data, S)
-  data$Z    = get_col_or_vector(data, Z)
-  
-  n.code=sum(data$S)
-  N=nrow(data)
-  data$pi = rep(n.code/N, N)
-  
-  est.part = data %>%
-    group_by( Z ) %>%
-    dplyr::summarise( # First calculate effect estimate using model-assisted estimator
-      Ybar = mean( Yhat ),
-      adj = weighted.mean( Yobs[S==1] - Yhat[S==1],  w=1/pi[S==1] ),
-      Ybar.adj = Ybar + adj,
-      
-      # Next calculate "true" variance of tau.hat
-      N = n(),
-      var.y = var(Yobs),
-      var.resid = var(Yobs-Yhat),
-      
-      # Finally, calculate the estimated variance of tau.hat based on partial coding
-      var.y.coded = var(Yobs[S==1]),
-      n.z = sum(S),
-      var.resid.coded = var(Yobs[S==1] - Yhat[S==1]),
-      .groups="drop"
-    )
-  
-  est = diff(est.part$Ybar.adj)
-  var = sum(est.part$var.y/est.part$N) + sum( (est.part$N - est.part$n.z)/est.part$N * (est.part$var.resid/est.part$n.z))
-  
-  var.hat.A = sum(est.part$var.y.coded/est.part$N)
-  var.hat.B = sum( (est.part$N -est.part$n.z)/est.part$N * (est.part$var.resid.coded/est.part$n.z))
-  
-  
-  
-  
-  res <- data.frame( est=est,
-                     SE = sqrt(var),
-                     SEhat = sqrt(var.hat.A + var.hat.B),
-                     SEhat.full = sqrt(var.hat.A),
-                     SEhat.samp = sqrt(var.hat.B),
-                     S2.0 = est.part$var.y.coded[[1]] ,
-                     S2.1 = est.part$var.y.coded[[2]] )
-  
-  if ( return_pieces ) {
-    return( list( res = res,
-                  est.part = est.part ) )
-  }
-  
-  return( res )
-  
-}
 
 
