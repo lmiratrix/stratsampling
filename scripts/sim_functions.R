@@ -191,6 +191,8 @@ one_iter_optimal_pilot = function(dat, n_code, pilot_frac = 0.05,
                   strata = "strata", finite_pop = finite_pop )
 }
 
+
+
 # Function to compute all three types of model-assisted estimators in one pass
 one_iter_all <- function(dat, n_code, Z="Z", finite_pop=FALSE, 
                          include_rand=TRUE, pilot_frac=NULL) {
@@ -300,7 +302,7 @@ one_iter_pilot_select = function(dat, n_code, candidates,
     require( stratsampling )
     
     if (!is.null(Z)){
-        n_pilot = round( pilot_select_frac * nrow(dat) /2)*2
+        n_pilot = round( pilot_select_frac * nrow(dat) / 2 )*2
     }
     else{
         n_pilot = round( pilot_select_frac * nrow(dat))

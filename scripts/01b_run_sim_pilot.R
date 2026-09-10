@@ -1,7 +1,9 @@
 
 # =====================================================================
 # Pilot-based optimal allocation simulation, balanced-exact
-# configuration only. Each iteration computes, on the SAME population:
+# configuration only. '
+#
+# Each iteration computes, on the SAME population:
 #   Stratified (proportional), Optimal (oracle Neyman),
 #   and for each pilot budget fraction:
 #     Optimal-Pilot-Pooled (pilot kept in estimation sample)
@@ -23,6 +25,7 @@ source("scripts/sim_functions.R")
 #PILOT_FRACS <- c(1/5,1/4,1/3, 1/2,3/5,3/4)   # share of the coding budget spent on the pilot
 
 PILOT_FRACS <- sort(c(seq(0.1,0.7,by=0.1),1/4,1/3,2/3,3/4))  # share of the coding budget spent on the pilot
+PILOT_FRACS
 
 n_iter      <- 1000             # set to e.g. 100 for a test run
 
@@ -40,6 +43,8 @@ param_grid <- expand.grid(
 )
 
 cli::cli_inform("Total simulation scenarios: {nrow(param_grid)}\n")
+
+
 
 # ---------------------------------------------------------------------
 # One iteration: 3 baselines + 2 pilot arms per pilot fraction,
@@ -62,9 +67,6 @@ one_iter_pilot_study = function(params, pilot_fracs = PILOT_FRACS) {
     out.opt    = one_iter_optimal_strat(dat, n_code, Z = "Z"); out.opt$method = "Optimal"
     out.opt_rand = one_iter_optimal_wrong(dat, n_code, Z= "Z", distort="random"); out.opt_rand$method = "Optimal-Random"
 
-
-
-    
     base = bind_rows( out.prop, out.opt, out.opt_rand) %>%
         mutate(pilot_frac = NA_real_)
     
@@ -121,6 +123,8 @@ cores <- min(parallel::detectCores() - 1, nrow(param_grid))
 cl <- makeCluster(cores)
 registerDoParallel(cl)
 
+cli::cli_h1("Running the full pilot simulation" )
+
 set.seed(1234)
 
 system.time(
@@ -131,6 +135,8 @@ system.time(
 )
 
 stopCluster(cl)
+
+cli::cli_h1("Simulation complete.  Now saving" )
 
 results_pilot <- dplyr::bind_rows(results_pilot)
 

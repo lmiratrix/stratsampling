@@ -16,6 +16,7 @@ apportion_counts <- function(target, total, cap) {
     n
 }
 
+
 #' Generate Stratified or Simple Random Sample Indicators
 #'
 #' Given a population data frame, generates a binary vector indicating
@@ -430,12 +431,18 @@ calc_optimal_allocation <- function( dat, n_code,
 }
 
 
-#' Oracle optimal allocation (wrapper)
+#' Oracle Optimal (Neyman) Allocation Calculator (Wrapper)
 #'
 #' @description
 #' Backwards-compatible wrapper for \code{\link{calc_optimal_allocation}}
 #' in oracle mode (variance parameters computed from the actual residuals,
 #' requiring Yobs for all units, and no pilot).
+#'
+#' Computes the optimal sample allocation across strata using Neyman
+#' allocation, which allocates more units to strata with higher
+#' residual variance. This is an oracle method because it requires
+#' knowing the true outcomes (Yobs) for all units in order to compute
+#' the actual residuals.
 #'
 #' @inheritParams calc_optimal_allocation
 #' @export
@@ -458,6 +465,7 @@ calc_optimal_allocation_oracle <- function( dat, n_code,
                              distort = distort, min_n = min_n,
                              return_counts = return_counts, seed = seed )
 }
+
 
 #' Calculate Sampling Weights from a Stratified Sample
 #'

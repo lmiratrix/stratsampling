@@ -37,7 +37,9 @@ when in pilot mode.
 Two modes. Proxy mode (default; no outcome data needed): metrics based
 only on the predictions Yhat, with the spread of stratum-mean Yhat
 (\code{mean_spread}) as a proxy for the between-strata residual
-structure. Pilot mode (pass \code{Yobs} and pilot indicator \code{S}):
+structure.
+
+Alternatively use Pilot mode (invoke by passing \code{Yobs} and pilot indicator \code{S}):
 additionally computes direct pilot estimates of the between-strata
 spread of mean residuals (\code{mean_spread_pilot}) and of the
 within-stratum residual variances, weighting cells by their

@@ -27,7 +27,6 @@ library(stratsampling)
 
 # Introduction
 
-
 Many studies now use a surrogate outcome, such as a machine-coded or AI-generated score, when the outcome of interest is expensive to obtain.
 The surrogate may be available for every unit, but it is not the actual outcome.
 If the surrogate is systematically off, estimates based on it alone can also be off.
@@ -36,15 +35,24 @@ Mozer and Miratrix [-@mozer2025more] describe one way to use a human-coded subsa
 The researcher codes a random subset of units, compares the human-coded outcomes to the surrogate outcomes in that subset, and uses the observed differences to adjust the full-sample surrogate estimate.
 Mozer, Pashley, and Miratrix [-@mozer2026stratified] extend this idea by asking which units should be selected for human coding.
 When surrogate errors vary across observable groups, stratified sampling can reduce uncertainty by making the human-coded sample more informative.
-This package, `stratsampling`, provides the code to implement the methods in these works.
 
-In this vignette, we provide an overview of the package, walking through the workflow of selecting a sample for coding and then estimating final treatment impacts with both the machine predicted and the human coded data.
-We also show how to conduct power calculations to assess the possible costs and benefits of human coding a stratified subsample of the full dataset.
+The workflow below has four parts:
+
+1. **Stratification**: Create and evaluate stratifications
+   based on surrogate scores and covariates.
+2. **Sample**: Draw stratified samples with proportional or custom
+   allocation across strata.
+3. **Estimate**: Compute model-assisted estimators that combine
+   surrogate predictions with bias-corrected adjustments from the coded
+   subsample.
+4. **Analyze Power**: Compare the precision of stratified
+   and simple random sampling designs for different levels of coding effort.
+
 
 
 ## Installation
 
-To use this package, first load it after installing it from GitHub (you may need to install `devtools` from CRAN to make the following code run, and you only need to run the install line once as it will install it permanently on your computer):
+Install the package from GitHub, then load it:
 
 ```{r setup, eval=FALSE}
 # install.packages("devtools")
@@ -56,7 +64,6 @@ library(stratsampling)
 # A complete workflow
 
 The example uses the package's built-in toy dataset.
-Pretend these data come from an RCT where you have a machine-coded outcome that is a proxy for some outcome that would be expensive to obtain.
 The workflow has five steps: load data, choose a stratification, draw a sample, merge the coded outcomes, and estimate the treatment effect.
 
 
@@ -71,7 +78,6 @@ The dataset also contains baseline covariates and a treatment indicator:
 data( toy_data )
 head( toy_data )
 ```
-
 
 The `toy_data` dataset contains `r nrow(toy_data)` observations with
 three baseline covariates (`X1`, `X2`, `X3`), a surrogate prediction
@@ -102,12 +108,10 @@ comparison_precoding <- compare_stratifications_precoding( toy_data,
 head( comparison_precoding )
 ```
 
-The results are sorted by promise, with the best choice at top.
-We might select `Yhat_quintiles` as our choice, but given subject matter expertise we might also choose a different one that we believe is worth focusing on.
-For example, in this case, we know that `X3` is a strong predictor of how well we are able to predict the outcome, so we might include it.
-We could directly use `Yhat_X3_3x3` as our choice, or we could use the `make_interaction_strata()` function to make a custom stratification that is based on the interaction of `Yhat` and `X3`.
+The table orders candidates by these pre-coding metrics.
+Here, we use a 3-by-3 interaction stratification because `X3` was constructed to be predictive of surrogate accuracy.
 
-Here we decide to make a 3 x 3 stratification of `Yhat` and `X3`:
+The `make_interaction_strata()` function creates such stratifications directly:
 
 ```{r}
 toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat, 
@@ -118,7 +122,7 @@ toy_data$strata <- make_interaction_strata( x1 = toy_data$Yhat,
                                             var_name2 = "X3",
                                             z_vec = toy_data$Tx)
 
-# The above is equivalent to pulling from the candidate library:
+# This is equivalent to pulling from the candidate library:
 alt_strat <- candidates[[ 'Yhat_X3_3x3' ]]
 all.equal( toy_data$strata, alt_strat )
 ```
@@ -136,9 +140,6 @@ toy_data$sample <- generate_sample_index( toy_data, 100,
                                           seed = 4044 )
 table( toy_data$strata, toy_data$sample )
 ```
-
-Note our 9 strata with around 10% of the documents being coded in each.
-The code will attempt to sample proportional to strata size, unless told otherwise.
 
 The table shows that each of the 9 strata contributes roughly 10% of its documents to the coded sample.
 
@@ -160,7 +161,7 @@ After coding, merge the human-coded outcomes back into the full dataset:
 
 ```{r}
 data( "toy_data_coded" )
-toy_data_coded
+head( toy_data_coded )
 
 full_data <- toy_data %>%
     left_join( toy_data_coded, by = "ID" )

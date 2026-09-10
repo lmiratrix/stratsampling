@@ -147,6 +147,54 @@ test_that( "estimate_pilot_variances matches oracle when pilot = everyone", {
 } )
 
 
+test_that( "shrink = TRUE performs empirical-Bayes shrinkage of means and variances", {
+
+    set.seed( 8080 )
+    S_pilot <- generate_sample_index( dat, n_code = 80, Z = "Z", strata = "strata" )
+
+    # shrink = FALSE (default): var.alloc/mean.alloc are just the raw values
+    vt_raw <- estimate_pilot_variances( dat, S = S_pilot, Z = "Z", strata = "strata" )
+    not_thin <- !is.na( vt_raw$var_resid_pilot ) & vt_raw$n_pilot.zk >= 2
+    expect_equal( vt_raw$var.alloc[not_thin], vt_raw$var_resid_pilot[not_thin] )
+    expect_equal( vt_raw$mean.alloc, vt_raw$mean_resid_pilot )
+
+    # shrink = TRUE: shrunk values are finite, sit between the raw cell
+    # value and the pooled/prior value, and actually move at least some
+    # cells (i.e. shrinkage is not a no-op)
+    vt_shrunk <- estimate_pilot_variances( dat, S = S_pilot, Z = "Z", strata = "strata",
+                                           shrink = TRUE )
+    expect_true( all( is.finite( vt_shrunk$var.alloc ) ) )
+    expect_true( all( is.finite( vt_shrunk$mean.alloc ) ) )
+
+    finite_raw <- is.finite( vt_shrunk$var_resid_pilot )
+    lo <- pmin( vt_shrunk$var_resid_pilot, vt_shrunk$var_pooled )[finite_raw]
+    hi <- pmax( vt_shrunk$var_resid_pilot, vt_shrunk$var_pooled )[finite_raw]
+    expect_true( all( vt_shrunk$var.alloc[finite_raw] >= lo - 1e-8 &
+                      vt_shrunk$var.alloc[finite_raw] <= hi + 1e-8 ) )
+
+    expect_true( any( abs( vt_shrunk$var.alloc - vt_shrunk$var_resid_pilot ) > 1e-8 ) )
+    expect_true( any( abs( vt_shrunk$mean.alloc - vt_shrunk$mean_resid_pilot ) > 1e-8 ) )
+
+    # A cell with zero pilot units has no information of its own and
+    # should fall back entirely to the pooled within-arm variance
+    S_conc <- as.integer( dat$strata == 1 )
+    expect_warning(
+        vt_conc <- estimate_pilot_variances( dat, S = S_conc, Z = "Z", strata = "strata",
+                                             shrink = TRUE )
+    )
+    unpiloted <- vt_conc$n_pilot.zk == 0
+    expect_true( any(unpiloted) )
+    expect_equal( vt_conc$var.alloc[unpiloted], vt_conc$var_pooled[unpiloted] )
+} )
+
+
+test_that( "shrink must be a single non-missing logical", {
+    expect_error( estimate_pilot_variances( dat, S = rep(1, nrow(dat)), shrink = 0.5 ) )
+    expect_error( estimate_pilot_variances( dat, S = rep(1, nrow(dat)), shrink = NA ) )
+    expect_error( estimate_pilot_variances( dat, S = rep(1, nrow(dat)), shrink = c(TRUE, FALSE) ) )
+} )
+
+
 test_that( "full pilot reproduces oracle stratification rankings", {
     
     dat2 <- dat %>%

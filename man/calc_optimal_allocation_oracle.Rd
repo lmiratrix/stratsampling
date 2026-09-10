@@ -2,7 +2,7 @@
 % Please edit documentation in R/sampling_functions.R
 \name{calc_optimal_allocation_oracle}
 \alias{calc_optimal_allocation_oracle}
-\title{Oracle optimal allocation (wrapper)}
+\title{Oracle Optimal (Neyman) Allocation Calculator (Wrapper)}
 \usage{
 calc_optimal_allocation_oracle(
   dat,
@@ -47,4 +47,10 @@ the sampled data.}
 Backwards-compatible wrapper for \code{\link{calc_optimal_allocation}}
 in oracle mode (variance parameters computed from the actual residuals,
 requiring Yobs for all units, and no pilot).
+
+Computes the optimal sample allocation across strata using Neyman
+allocation, which allocates more units to strata with higher
+residual variance. This is an oracle method because it requires
+knowing the true outcomes (Yobs) for all units in order to compute
+the actual residuals.
 }

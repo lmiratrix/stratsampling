@@ -12,7 +12,7 @@ estimate_pilot_variances(
   Yobs = "Yobs",
   Yhat = "Yhat",
   min_pilot = 2,
-  shrink = 0
+  shrink = FALSE
 )
 }
 \arguments{
@@ -30,13 +30,26 @@ must have non-missing Yobs.}
 \item{min_pilot}{Minimum pilot units per cell before falling back to
 the pooled variance. Default 2.}
 
-\item{shrink}{Shrinkage weight between 0-1 pulling each cell variance
-toward the pooled within-arm variance. Default 0 (no shrinkage).}
+\item{shrink}{Logical. If \code{FALSE} (default), \code{var.alloc} and
+\code{mean.alloc} are just the raw per-cell values (with the
+\code{min_pilot} fallback applied to \code{var.alloc}, as before).
+If \code{TRUE}, both are empirical-Bayes shrunk within each
+treatment arm: variances are shrunk first (a Smyth (2004)-style,
+df-weighted posterior mean toward the pooled within-arm variance),
+and those shrunk variances are then used, in place of the raw
+variances, to shrink the cell means (a DerSimonian-Laird-style
+Fay-Herriot/James-Stein estimator toward the precision-weighted
+grand mean). See \code{scripts/pilot_shrinkage_memo.md} for the
+derivation and citations.}
 }
 \value{
 Data frame with one row per cell: \code{.Z}, \code{.strata},
-\code{N.zk}, \code{n_pilot.zk}, \code{mean_resid_pilot},
-\code{var_resid_pilot}, \code{var_pooled}, and \code{var.alloc}.
+\code{N.zk}, \code{n_pilot.zk}, \code{mean_resid_pilot} (raw),
+\code{var_resid_pilot} (raw), \code{var_pooled}, \code{var.alloc},
+and \code{mean.alloc}. When \code{shrink = FALSE}, \code{var.alloc}
+and \code{mean.alloc} equal the raw per-cell values (subject to the
+\code{min_pilot} fallback on \code{var.alloc}); when
+\code{shrink = TRUE} they are the shrunk values described above.
 }
 \description{
 Computes, for each treatment-by-stratum cell, the pilot sample size,
@@ -44,6 +57,6 @@ mean residual, and residual variance, and returns them in the format
 \code{\link{calc_optimal_allocation}} expects for \code{var_alloc}.
 Cells with fewer than \code{min_pilot} pilot units (or an inestimable
 variance) fall back to the pooled within-arm pilot variance, with a
-warning. Optionally, all cell variances can be shrunk toward the
-pooled value.
+warning. Optionally, cell means and variances can be empirical-Bayes
+shrunk toward pooled, within-arm values.
 }
