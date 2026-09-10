@@ -397,6 +397,9 @@ calc_optimal_allocation <- function( dat, n_code,
         mutate( n_new.zk = n.zk - n_pilot.zk ) %>%
         dplyr::arrange( .Z, .strata )
     
+    # At this point we have calculated the number of additional units
+    # we should sample within each strata.
+    
     if ( return_counts ) {
         return( strat_counts )
     }

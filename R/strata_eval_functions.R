@@ -51,7 +51,6 @@
 #'     across strata, suggesting optimal (Neyman) allocation will outperform 
 #'     proportional allocation.
 #'   \item \code{imbalance}: Values close to 1 indicate balanced strata; highly 
-
 #'     unbalanced strata may reduce efficiency.
 #' }
 #' @export
@@ -232,7 +231,9 @@ compare_stratifications <- function(data, candidates, Z="Z", ...) {
 #' Two modes. Proxy mode (default; no outcome data needed): metrics based
 #' only on the predictions Yhat, with the spread of stratum-mean Yhat
 #' (\code{mean_spread}) as a proxy for the between-strata residual
-#' structure. Pilot mode (pass \code{Yobs} and pilot indicator \code{S}):
+#' structure. 
+#' 
+#' Alternatively use Pilot mode (invoke by passing \code{Yobs} and pilot indicator \code{S}):
 #' additionally computes direct pilot estimates of the between-strata
 #' spread of mean residuals (\code{mean_spread_pilot}) and of the
 #' within-stratum residual variances, weighting cells by their
@@ -328,6 +329,7 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
         stopifnot( all( data$S %in% c(0, 1) ) )
         data$resid = data$Yobs - data$Yhat
         
+        # TODO: UPDATE THIS WITH SHRINKAGE - LWM
         pilot_stats <- data %>%
             group_by( Z, strata ) %>%
             summarise(
@@ -356,8 +358,8 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
         
         overall <- overall %>%
             mutate(
-                mean_spread_pilot = mean(pilot_arm$var_means_pilot),
-                avg_within_var_pilot = mean(pilot_arm$avg_within_var_pilot),
+                mean_spread_pilot = mean(pilot_arm$var_means_pilot), # BS
+                avg_within_var_pilot = mean(pilot_arm$avg_within_var_pilot), # WS
                 sd_within_var_pilot = mean(pilot_arm$sd_within_var_pilot),
                 min_pilot_cell = min(pilot_arm$min_pilot),
                 n_pilot = sum(pilot_arm$n_pilot)
@@ -366,6 +368,9 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
     
     return( overall )
 }
+
+
+
 
 #' Compare candidate stratifications before (full) coding
 #'
@@ -410,10 +415,13 @@ compare_stratifications_precoding <- function( data, candidates, Z = NULL,
     
     if ( pilot_mode ) {
         results %>% arrange( desc(mean_spread_pilot) )   # NAs sort last
+        # Also rank by mean_spread_pilot - avg_within_var_pilot
     } else {
         results %>% arrange( desc(mean_spread) )
     }
 }
+
+
 
 #' Compute variance decomposition (BS and WS components)
 #'
@@ -446,7 +454,6 @@ compare_stratifications_precoding <- function( data, candidates, Z = NULL,
 #'   decomposition.  See details for the specific components included in each case.
 #'
 #'
-
 #'
 #'
 #' @details 

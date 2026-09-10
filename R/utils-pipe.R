@@ -20,7 +20,7 @@
 #' @importFrom scales percent comma
 #' @importFrom glue glue
 #' @importFrom stats var sd rnorm quantile lm residuals cor pnorm qnorm
-#'   runif median setNames weighted.mean
+#'   runif median setNames weighted.mean uniroot
 #' @importFrom utils combn
 #' @usage lhs \%>\% rhs
 #' @param lhs A value or the magrittr placeholder.
