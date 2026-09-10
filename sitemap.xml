@@ -19,6 +19,8 @@
 <url><loc>https://lmiratrix.github.io/stratsampling/reference/compute_variance_decomposition.html</loc></url>
 <url><loc>https://lmiratrix.github.io/stratsampling/reference/create_stratification_candidates.html</loc></url>
 <url><loc>https://lmiratrix.github.io/stratsampling/reference/describe_population.html</loc></url>
+<url><loc>https://lmiratrix.github.io/stratsampling/reference/dot-shrink_cell_means.html</loc></url>
+<url><loc>https://lmiratrix.github.io/stratsampling/reference/dot-shrink_cell_variances.html</loc></url>
 <url><loc>https://lmiratrix.github.io/stratsampling/reference/est_ma_srs.html</loc></url>
 <url><loc>https://lmiratrix.github.io/stratsampling/reference/est_ma_strat.html</loc></url>
 <url><loc>https://lmiratrix.github.io/stratsampling/reference/est_oracle.html</loc></url>
