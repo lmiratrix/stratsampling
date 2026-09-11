@@ -86,7 +86,7 @@ shrunk toward pooled, within-arm values.</p>
 <span>  Yobs <span class="op">=</span> <span class="st">"Yobs"</span>,</span>
 <span>  Yhat <span class="op">=</span> <span class="st">"Yhat"</span>,</span>
 <span>  min_pilot <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>  shrink <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  shrink <span class="op">=</span> <span class="cn">TRUE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -95,7 +95,7 @@ shrunk toward pooled, within-arm values.</p>
 
 
 <dl><dt id="arg-dat">dat<a class="anchor" aria-label="anchor" href="#arg-dat"></a></dt>
-<dd><p>Data frame.</p></dd>
+<dd><p>Data frame</p></dd>
 
 
 <dt id="arg-s">S<a class="anchor" aria-label="anchor" href="#arg-s"></a></dt>
@@ -124,14 +124,22 @@ the pooled variance. Default 2.</p></dd>
 <dd><p>Logical. If <code>FALSE</code> (default), <code>var.alloc</code> and
 <code>mean.alloc</code> are just the raw per-cell values (with the
 <code>min_pilot</code> fallback applied to <code>var.alloc</code>, as before).
-If <code>TRUE</code>, both are empirical-Bayes shrunk within each
-treatment arm: variances are shrunk first (a Smyth (2004)-style,
-df-weighted posterior mean toward the pooled within-arm variance),
-and those shrunk variances are then used, in place of the raw
-variances, to shrink the cell means (a DerSimonian-Laird-style
-Fay-Herriot/James-Stein estimator toward the precision-weighted
-grand mean). See <code>scripts/pilot_shrinkage_memo.md</code> for the
-derivation and citations.</p></dd>
+If <code>TRUE</code>, both are empirical-Bayes shrunk, in two stages, with
+variances pooled fully across treatment arms and means handled as a
+"hybrid": variances are shrunk first, toward a single pooled
+variance computed across <em>all</em> cells regardless of arm (a
+Smyth (2004)-style, df-weighted posterior mean) – variances are a
+harder-to-estimate, second-order concern here, so all cells are
+pooled for maximum stability. Those shrunk variances are then used,
+in place of the raw variances, to shrink the cell means (a
+DerSimonian-Laird-style Fay-Herriot/James-Stein estimator): the
+<em>amount</em> of shrinkage (the between-cell variance
+<code>sigma^2_u</code>) is likewise estimated once across all cells, but
+each cell is shrunk toward its <em>own arm's</em> precision-weighted
+grand mean, not a single grand mean pooled across arms, since arms
+may carry a genuine mean-residual shift. See
+<code>scripts/pilot_shrinkage_memo.md</code> for the derivation and
+citations.</p></dd>
 
 </dl></div>
     <div id="value">
