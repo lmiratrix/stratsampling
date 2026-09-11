@@ -254,7 +254,8 @@ compare_stratifications <- function(data, candidates, Z="Z", ...) {
 #' @export
 evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
                                                Yhat = "Yhat",
-                                               Yobs = NULL, S = NULL ) {
+                                               Yobs = NULL, S = NULL,
+                                               shrink = TRUE ) {
     
     if ( is.null(Z) ) {
         data$Z = 1
@@ -321,7 +322,7 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
         total_var_Yhat = var(data$Yhat),
     )
     
-    # ---- Pilot metrics (optional) ----
+    # ---- Pilot metrics (computed if pilot data available) ----
     
     if ( pilot_mode ) {
         data$Yobs = get_col_or_vector( data, Yobs )
@@ -329,8 +330,9 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
         stopifnot( all( data$S %in% c(0, 1) ) )
         data$resid = data$Yobs - data$Yhat
         
-        # TODO: UPDATE THIS WITH SHRINKAGE - LWM
-        pilot_stats <- data %>%
+        if ( FALSE ) {
+            # OLD stat generator
+            pilot_stats <- data %>%
             group_by( Z, strata ) %>%
             summarise(
                 N_zk = n(),
@@ -339,6 +341,18 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
                 var_resid = var( resid[S == 1] ),
                 .groups = "drop"
             )
+        }
+        pilot_stats <- estimate_pilot_variances( data, 
+                                        S="S", Z="Z",
+                                        strata="strata", Yobs="Yobs",
+                                        Yhat="Yhat", shrink = shrink ) %>%
+            rename( mean_resid = mean.alloc,
+                    var_resid = var.alloc,
+                    n_pilot = n_pilot.zk,
+                    N_zk = N.zk,
+                    strata = .strata,
+                    Z = .Z )
+        
         
         # Full-population weights; NA propagates when a stratum has too
         # few pilot units, flagging the candidate as not pilot-evaluable.
@@ -388,7 +402,8 @@ evaluate_stratification_precoding <- function( data, strata = NULL, Z = "Z",
 #' @export
 compare_stratifications_precoding <- function( data, candidates, Z = NULL,
                                                Yhat = "Yhat",
-                                               Yobs = NULL, S = NULL ) {
+                                               Yobs = NULL, S = NULL,
+                                               shrink = TRUE ) {
     
     stopifnot( is.data.frame(data),
                Yhat %in% colnames(data),
@@ -403,7 +418,8 @@ compare_stratifications_precoding <- function( data, candidates, Z = NULL,
         
         metrics <- evaluate_stratification_precoding( data, strata, Z = Z,
                                                       Yhat = Yhat,
-                                                      Yobs = Yobs, S = S )
+                                                      Yobs = Yobs, S = S,
+                                                      shrink = shrink )
         metrics %>%
             mutate( stratification = cname, .before = 1 )
     })
@@ -414,12 +430,76 @@ compare_stratifications_precoding <- function( data, candidates, Z = NULL,
     }
     
     if ( pilot_mode ) {
-        results %>% arrange( desc(mean_spread_pilot) )   # NAs sort last
+        results %>% arrange( desc(mean_spread_pilot - avg_within_var_pilot) )   # NAs sort last
         # Also rank by mean_spread_pilot - avg_within_var_pilot
     } else {
         results %>% arrange( desc(mean_spread) )
     }
 }
+
+
+
+
+
+
+
+## Testing code for strata selection ------
+
+
+if ( FALSE ) {
+    
+    library( dplyr )   # one_iter_pilot_select() uses bind_rows/mutate/relocate
+    
+    set.seed( 42 )
+    dat <- generate_population( N = 1000, n_strat = 4,
+                                strata_config = "unbalanced",
+                                tau = 0.5, bias = "moderate",
+                                residual_var = "heterogeneous",
+                                R2_target = 0.6 )
+    dat$X1 <- rnorm( nrow(dat) )   # a covariate beyond Yhat that is useless, for richer candidates
+    dat$X2 <- rnorm( nrow(dat) )   # a covariate beyond Yhat that is useless, for richer candidates
+    table( dat$strata )
+    head(dat)
+    
+    # We have the predicted outcome, garbage, and the actual stratification to pick from
+    candidates <- create_stratification_candidates( dat, 
+                                                    vars = c("Yhat", "X1", "strata"), 
+                                                   #vars = c( "X1", "X2" ),
+                                                    Z = "Z" )
+    names(candidates)
+    
+    dat$S = as.numeric( sample(nrow(dat)) <= 100 )
+    yo = dat$Yobs
+    yo[ dat$S == 0 ] = NA
+    cc <- compare_stratifications_precoding( dat, candidates,
+                                       Z="Z", Yhat = "Yhat",
+                                       Yobs = yo, S = dat$S, shrink = TRUE )
+    
+    cc
+    qplot( cc$mean_spread_pilot )
+
+    cc2 <- compare_stratifications_precoding( dat, candidates,
+                                             Z="Z", Yhat = "Yhat",
+                                             Yobs = yo, S = dat$S, shrink = FALSE )
+    
+    cc2
+    qplot( cc2$mean_spread_pilot )
+    
+    
+    cc3 = compare_stratifications_precoding( dat, candidates,
+                                            Z="Z", Yhat = "Yhat")
+    cc3    
+    
+    cbind( cc$stratification,
+           cc2$stratification,
+           cc3$stratification )
+    cbind( cc$n_strata,
+           cc2$n_strata,
+           cc3$n_strata )
+    
+}
+
+
 
 
 
@@ -1133,4 +1213,6 @@ plot_decomposition_comparison <- function(decomposition_result, top_n = NULL,
     
     return(p)
 }
+
+
 

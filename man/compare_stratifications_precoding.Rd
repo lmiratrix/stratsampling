@@ -10,7 +10,8 @@ compare_stratifications_precoding(
   Z = NULL,
   Yhat = "Yhat",
   Yobs = NULL,
-  S = NULL
+  S = NULL,
+  shrink = TRUE
 )
 }
 \arguments{

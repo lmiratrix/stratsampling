@@ -12,11 +12,11 @@ estimate_pilot_variances(
   Yobs = "Yobs",
   Yhat = "Yhat",
   min_pilot = 2,
-  shrink = FALSE
+  shrink = TRUE
 )
 }
 \arguments{
-\item{dat}{Data frame.}
+\item{dat}{Data frame}
 
 \item{S}{Name of (or vector for) the 0/1 pilot indicator. Pilot units
 must have non-missing Yobs.}
@@ -33,14 +33,22 @@ the pooled variance. Default 2.}
 \item{shrink}{Logical. If \code{FALSE} (default), \code{var.alloc} and
 \code{mean.alloc} are just the raw per-cell values (with the
 \code{min_pilot} fallback applied to \code{var.alloc}, as before).
-If \code{TRUE}, both are empirical-Bayes shrunk within each
-treatment arm: variances are shrunk first (a Smyth (2004)-style,
-df-weighted posterior mean toward the pooled within-arm variance),
-and those shrunk variances are then used, in place of the raw
-variances, to shrink the cell means (a DerSimonian-Laird-style
-Fay-Herriot/James-Stein estimator toward the precision-weighted
-grand mean). See \code{scripts/pilot_shrinkage_memo.md} for the
-derivation and citations.}
+If \code{TRUE}, both are empirical-Bayes shrunk, in two stages, with
+variances pooled fully across treatment arms and means handled as a
+"hybrid": variances are shrunk first, toward a single pooled
+variance computed across \emph{all} cells regardless of arm (a
+Smyth (2004)-style, df-weighted posterior mean) -- variances are a
+harder-to-estimate, second-order concern here, so all cells are
+pooled for maximum stability. Those shrunk variances are then used,
+in place of the raw variances, to shrink the cell means (a
+DerSimonian-Laird-style Fay-Herriot/James-Stein estimator): the
+\emph{amount} of shrinkage (the between-cell variance
+\code{sigma^2_u}) is likewise estimated once across all cells, but
+each cell is shrunk toward its \emph{own arm's} precision-weighted
+grand mean, not a single grand mean pooled across arms, since arms
+may carry a genuine mean-residual shift. See
+\code{scripts/pilot_shrinkage_memo.md} for the derivation and
+citations.}
 }
 \value{
 Data frame with one row per cell: \code{.Z}, \code{.strata},

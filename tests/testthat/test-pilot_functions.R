@@ -112,7 +112,8 @@ test_that( "pilot mode: budget accounting, floors, and pilot inclusion", {
     S_conc = as.integer( dat$strata == 1 )
     expect_warning(
         vt2 <- estimate_pilot_variances( dat, S = S_conc,
-                                         Z = "Z", strata = "strata" )
+                                         Z = "Z", strata = "strata",
+                                         shrink = FALSE )
     )
     dd2 <- calc_optimal_allocation( dat, n_code = 600,
                                     Z = "Z", strata = "strata",
@@ -136,7 +137,8 @@ test_that( "pilot mode: budget accounting, floors, and pilot inclusion", {
 test_that( "estimate_pilot_variances matches oracle when pilot = everyone", {
     
     vt_full <- estimate_pilot_variances( dat, S = rep( 1, nrow(dat) ),
-                                         Z = "Z", strata = "strata" )
+                                         Z = "Z", strata = "strata",
+                                         shrink = FALSE )
     
     oracle_counts <- calc_optimal_allocation_oracle( dat, n_code = 300,
                                                      Z = "Z", strata = "strata",
@@ -152,39 +154,93 @@ test_that( "shrink = TRUE performs empirical-Bayes shrinkage of means and varian
     set.seed( 8080 )
     S_pilot <- generate_sample_index( dat, n_code = 80, Z = "Z", strata = "strata" )
 
-    # shrink = FALSE (default): var.alloc/mean.alloc are just the raw values
-    vt_raw <- estimate_pilot_variances( dat, S = S_pilot, Z = "Z", strata = "strata" )
+    # shrink = FALSE: var.alloc/mean.alloc are just the raw values
+    vt_raw <- estimate_pilot_variances( dat, S = S_pilot, Z = "Z", strata = "strata",
+                                        shrink = FALSE )
     not_thin <- !is.na( vt_raw$var_resid_pilot ) & vt_raw$n_pilot.zk >= 2
     expect_equal( vt_raw$var.alloc[not_thin], vt_raw$var_resid_pilot[not_thin] )
     expect_equal( vt_raw$mean.alloc, vt_raw$mean_resid_pilot )
 
-    # shrink = TRUE: shrunk values are finite, sit between the raw cell
-    # value and the pooled/prior value, and actually move at least some
-    # cells (i.e. shrinkage is not a no-op)
+    # shrink = TRUE: shrunk values are finite, and actually move at least
+    # some cells (i.e. shrinkage is not a no-op)
     vt_shrunk <- estimate_pilot_variances( dat, S = S_pilot, Z = "Z", strata = "strata",
                                            shrink = TRUE )
     expect_true( all( is.finite( vt_shrunk$var.alloc ) ) )
     expect_true( all( is.finite( vt_shrunk$mean.alloc ) ) )
 
+    # Variances are shrunk toward a SINGLE prior pooled across BOTH arms
+    # (not the arm-specific var_pooled column), so they should sit between
+    # the raw cell value and that all-arm pooled value.
+    var_pooled_all <- weighted.mean( vt_shrunk$var_resid_pilot,
+                                     w = pmax( vt_shrunk$n_pilot.zk - 1, 0 ),
+                                     na.rm = TRUE )
     finite_raw <- is.finite( vt_shrunk$var_resid_pilot )
-    lo <- pmin( vt_shrunk$var_resid_pilot, vt_shrunk$var_pooled )[finite_raw]
-    hi <- pmax( vt_shrunk$var_resid_pilot, vt_shrunk$var_pooled )[finite_raw]
+    lo <- pmin( vt_shrunk$var_resid_pilot[finite_raw], var_pooled_all )
+    hi <- pmax( vt_shrunk$var_resid_pilot[finite_raw], var_pooled_all )
     expect_true( all( vt_shrunk$var.alloc[finite_raw] >= lo - 1e-8 &
                       vt_shrunk$var.alloc[finite_raw] <= hi + 1e-8 ) )
+    # And it should exactly reproduce the internal helper called with that
+    # single all-arm prior (confirms variances are pooled fully, not per-arm)
+    expect_equal( vt_shrunk$var.alloc,
+                 .shrink_cell_variances( vt_shrunk$var_resid_pilot,
+                                        vt_shrunk$n_pilot.zk, var_pooled_all ) )
 
     expect_true( any( abs( vt_shrunk$var.alloc - vt_shrunk$var_resid_pilot ) > 1e-8 ) )
     expect_true( any( abs( vt_shrunk$mean.alloc - vt_shrunk$mean_resid_pilot ) > 1e-8 ) )
 
+    # Means are "hybrid": sigma^2_u is estimated once pooling both arms,
+    # but each cell is shrunk toward its OWN arm's grand mean. Confirm by
+    # reconstructing both pieces independently and checking the wiring.
+    psi <- ifelse( vt_shrunk$n_pilot.zk > 0, vt_shrunk$var.alloc / vt_shrunk$n_pilot.zk, Inf )
+    sigma2_u_check <- .estimate_sigma2_u( vt_shrunk$mean_resid_pilot, psi )
+    for ( z in unique(vt_shrunk$.Z) ) {
+        idx <- vt_shrunk$.Z == z
+        expected <- .shrink_toward_grand_mean( vt_shrunk$mean_resid_pilot[idx], psi[idx], sigma2_u_check )
+        expect_equal( vt_shrunk$mean.alloc[idx], expected )
+    }
+
     # A cell with zero pilot units has no information of its own and
-    # should fall back entirely to the pooled within-arm variance
+    # should fall back entirely to the (all-arm) pooled variance
     S_conc <- as.integer( dat$strata == 1 )
-    expect_warning(
-        vt_conc <- estimate_pilot_variances( dat, S = S_conc, Z = "Z", strata = "strata",
-                                             shrink = TRUE )
-    )
+    vt_conc <- estimate_pilot_variances( dat, S = S_conc, Z = "Z", strata = "strata",
+                                         shrink = TRUE )
+    
     unpiloted <- vt_conc$n_pilot.zk == 0
     expect_true( any(unpiloted) )
-    expect_equal( vt_conc$var.alloc[unpiloted], vt_conc$var_pooled[unpiloted] )
+    var_pooled_all_conc <- weighted.mean( vt_conc$var_resid_pilot,
+                                          w = pmax( vt_conc$n_pilot.zk - 1, 0 ),
+                                          na.rm = TRUE )
+    expect_equal( vt_conc$var.alloc[unpiloted], rep( var_pooled_all_conc, sum(unpiloted) ) )
+} )
+
+
+test_that( "shrink = TRUE mean shrinkage targets differ by arm when the arms genuinely differ", {
+
+    # Hand-built toy dataset: 2 arms x 4 strata, with a strong arm-level
+    # shift in mean residual (arm 1 is shifted up by 5), so a (wrong) full
+    # merge across arms for the shrinkage TARGET would be visibly off,
+    # while sigma^2_u is still shared/pooled across both arms.
+    set.seed( 909 )
+    n_strat <- 4
+    n_per_cell <- 6
+    strata <- rep( rep(1:n_strat, each = n_per_cell), 2 )
+    Z <- rep( 0:1, each = n_strat * n_per_cell )
+    stratum_effect <- rep( c(-3, -1, 1, 3), each = n_per_cell )
+    arm_shift <- ifelse( Z == 1, 5, 0 )
+    resid <- stratum_effect + arm_shift + rnorm( length(Z), sd = 1 )
+
+    toy <- data.frame( Z = Z, strata = strata, Yhat = 0, Yobs = resid )
+
+    vt <- estimate_pilot_variances( toy, S = rep(1, nrow(toy)), Z = "Z", strata = "strata",
+                                    shrink = TRUE )
+
+    gm0 <- weighted.mean( vt$mean_resid_pilot[ vt$.Z == 0 ], vt$n_pilot.zk[ vt$.Z == 0 ] )
+    gm1 <- weighted.mean( vt$mean_resid_pilot[ vt$.Z == 1 ], vt$n_pilot.zk[ vt$.Z == 1 ] )
+    expect_true( gm1 - gm0 > 3 )
+
+    # Shrunk means should still be visibly separated by arm (not collapsed
+    # toward one pooled-across-arms grand mean)
+    expect_true( mean( vt$mean.alloc[ vt$.Z == 1 ] ) - mean( vt$mean.alloc[ vt$.Z == 0 ] ) > 3 )
 } )
 
 
@@ -209,7 +265,8 @@ test_that( "full pilot reproduces oracle stratification rankings", {
     
     cmp_pilot <- compare_stratifications_precoding( dat2, candidates, Z = "Z",
                                                     Yobs = "Yobs",
-                                                    S = rep( 1, nrow(dat2) ) )
+                                                    S = rep( 1, nrow(dat2) ), 
+                                                    shrink = FALSE )
     
     # With a 100% pilot, the pilot-based between-strata spread is the
     # oracle quantity, so values (and hence rankings) must agree exactly

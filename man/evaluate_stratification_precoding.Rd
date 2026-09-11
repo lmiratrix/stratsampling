@@ -10,7 +10,8 @@ evaluate_stratification_precoding(
   Z = "Z",
   Yhat = "Yhat",
   Yobs = NULL,
-  S = NULL
+  S = NULL,
+  shrink = TRUE
 )
 }
 \arguments{
