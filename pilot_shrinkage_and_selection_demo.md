@@ -256,4 +256,4 @@ SE here is a mild approximation.
   Part 2 above.
 - `scripts/sim_functions.R` – `one_iter_pilot_select()` and
   `combine_estimators()` (see its doc string for the pooling formulas);
-  its sandbox has the source for Part 3 above.
+  its sandbox has the source for Part 3 above. 

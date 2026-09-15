@@ -1,0 +1,129 @@
+\documentclass[12pt]{article}
+
+\RequirePackage{amsmath,amssymb}
+
+\usepackage{blurb_style}
+
+\usepackage{hyperref}
+\usepackage{natbib}
+
+\bibliographystyle{plainnat}
+
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\tauhat}{\hat\tau}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+\begin{document}
+
+\author{Miratrix}
+\title{A Two-Wave, Pilot-Selected Stratification Design\\ with Precision-Weighted Combination}
+\date{\today}
+
+\maketitle
+
+This memo describes the two-stage (``two-wave'') estimator implemented in \texttt{one\_iter\_pilot\_select()} in the \texttt{stratsampling} package: a small pilot is used to \emph{choose} a stratification, a second, larger wave is drawn under that stratification, and the two waves' treatment-effect estimates are then combined with a precision (inverse-variance) weighted average.
+The companion memo \texttt{scripts/pilot\_shrinkage\_memo.md} covers how the per-stratum means and variances used along the way are themselves empirical-Bayes shrunk; this memo focuses on the two-wave design and, in particular, derives the weighting formula used to combine the two waves' estimates.
+
+
+%% -----------------------------------------------------------
+\section{Setup and Notation}
+\label{sec:setup}
+
+We have a population of $N$ units with treatment indicator $Z_i \in \{0,1\}$, an eventual human-coded outcome $Y_i$, and a surrogate score $\hat Y_i$ available for every unit.
+A total coding budget of $n$ units can be human-coded.
+We have a library of candidate stratifications $\{S^{(1)}, \dots, S^{(M)}\}$, each a partition of the population into strata, built from covariates and $\hat Y_i$ before any coding occurs.
+The target of inference is the average treatment effect $\tau$.
+
+The design splits the budget $n$ into a pilot wave of size $n_1$ (a fixed fraction $\rho \in (0,1)$ of $n$) and a main wave of size $n_2 = n - n_1$.
+
+
+%% -----------------------------------------------------------
+\section{Stage 1: Pilot Sample and Stratification Selection}
+\label{sec:stage1}
+
+A simple random sample (within treatment arm) of size $n_1$ is coded; call this pilot set $P$.
+For each candidate stratification $S^{(m)}$, the pilot's coded residuals $e_i = Y_i - \hat Y_i,\ i \in P$, are used to estimate the (shrinkage-adjusted) between-stratum spread of mean residuals net of within-stratum noise,
+\[
+  \hat D_m \;=\; \widehat{BS}_m \;-\; \widehat{WS}_m,
+\]
+where $\widehat{BS}_m$ estimates how much the stratum-mean residuals of $S^{(m)}$ differ from each other (the signal a stratification needs to be useful) and $\widehat{WS}_m$ estimates the average residual noise remaining within a stratum (see \texttt{compare\_stratifications\_precoding()} and the shrinkage memo for how $\widehat{BS}_m$ and $\widehat{WS}_m$ are computed from the pilot).
+The selected stratification is
+\[
+  S^\ast \;=\; \argmax_{m \in \{1,\dots,M\}} \hat D_m .
+\]
+The pilot also yields a first estimate of the treatment effect, the (unbiased) model-assisted SRS estimator computed on $P$ alone,
+\[
+  \tauhat_1, \qquad \hat V_1 \;=\; \widehat{\Var}(\tauhat_1).
+\]
+
+
+%% -----------------------------------------------------------
+\section{Stage 2: Main Sample on the Selected Stratification}
+\label{sec:stage2}
+
+A fresh sample of size $n_2$ is then drawn from the \emph{full} population --- not the pilot's un-coded remainder --- stratified on $S^\ast$, with allocation either proportional to stratum size or Neyman-optimal using the pilot's (shrunk) variance estimates as plug-in values.
+This yields the wave-2 model-assisted stratified estimator
+\[
+  \tauhat_2, \qquad \hat V_2 \;=\; \widehat{\Var}(\tauhat_2),
+\]
+again unbiased for $\tau$.
+Drawing wave 2 from the full population, rather than only the un-piloted remainder, keeps $\tauhat_2$'s design close to a standard stratified sample on $S^\ast$; the tradeoff, and the (approximate) independence of $\tauhat_1$ and $\tauhat_2$ that this buys, is discussed in Section~\ref{sec:caveats}.
+
+
+%% -----------------------------------------------------------
+\section{Combining the Two Waves: Precision Weighting}
+\label{sec:combine}
+
+We now have two unbiased estimators of the same $\tau$, $\tauhat_1$ and $\tauhat_2$, treated as independent (Section~\ref{sec:caveats}), with variances $V_1, V_2$.
+We then average them with a weighted average
+\[
+  \tauhat(w) \;=\; w\,\tauhat_1 + (1-w)\,\tauhat_2, \qquad w \in [0,1].
+\]
+where $w$ is based on the (estimated) precisions of the two estimates:
+\[
+  w^\ast \;=\; \frac{V_2}{V_1 + V_2} \;=\; \frac{1/V_1}{1/V_1 + 1/V_2},
+\]
+and at this weight the combined estimator's variance satisfies
+\[
+  \Var(\tauhat(w^\ast)) \;=\; \frac{V_1 V_2}{V_1+V_2}, \qquad\text{equivalently}\qquad
+  \frac{1}{\Var(\tauhat(w^\ast))} \;=\; \frac{1}{V_1} + \frac{1}{V_2}.
+\]
+
+
+The last identity is the familiar ``precisions add'' result: combining two independent unbiased estimates by inverse-variance weighting can only help, and never hurts more than either wave alone, since $1/V_1 + 1/V_2 \ge \max(1/V_1, 1/V_2)$.
+This is the same weighting principle behind the fixed-effect model in meta-analysis \citep{dersimonian1986meta} and classical combination of independent survey estimates \citep{cochran1977sampling}, and, in a different guise (borrowing strength across many strata instead of across two waves), behind the empirical-Bayes shrinkage in the companion memo \citep{fay1979estimates}.
+(These are claude references and might be fiction--Check)
+
+In practice $V_1, V_2$ are unknown and are replaced by their estimates $\hat V_1 = \widehat{SE}_1^2$, $\hat V_2 = \widehat{SE}_2^2$, giving the feasible combination implemented by \texttt{combine\_estimators()}:
+\[
+  \hat w \;=\; \frac{\hat V_2}{\hat V_1 + \hat V_2}, \qquad
+  \tauhat_{\text{combo}} \;=\; \hat w\, \tauhat_1 + (1-\hat w)\, \tauhat_2, \qquad
+  \widehat{SE}(\tauhat_{\text{combo}}) \;=\; \sqrt{\hat w^2 \hat V_1 + (1-\hat w)^2 \hat V_2}.
+\]
+
+
+Note: Each wave's estimator variance is itself sometimes reported as a sum of sub-components (e.g.\ a treatment/allocation component plus a sampling component); \texttt{combine\_estimators()} applies the \emph{same} $\hat w$ to each sub-component of each wave, if there is interest in those sub-components.
+This means combining each final sub-component separately, with the one weight $w^\ast$, adds back up to the combination of the whole.
+
+
+%% -----------------------------------------------------------
+\section{Assumptions and Caveats}
+\label{sec:caveats}
+
+Two assumptions are doing real work above and are worth stating plainly.
+
+\textbf{Unbiasedness of each wave.}
+$\tauhat_1$ is an SRS-based model-assisted estimator computed on the pilot alone, and $\tauhat_2$ is a stratified model-assisted estimator computed on a fresh wave-2 sample; each is unbiased for $\tau$ on its own design, \emph{provided} the choice of $S^\ast$ is not itself informed by wave 2's realized data.
+Selecting $S^\ast$ using only pilot residual spread, before wave 2 is drawn, keeps that choice a (random, pilot-dependent) but fixed design feature from wave 2's point of view.
+
+\textbf{Independence of the two waves.}
+The precision-weighting formula in Section~\ref{sec:combine} assumes $\tauhat_1 \indep \tauhat_2$.
+Wave 2 is drawn from the \emph{full} population rather than the un-piloted remainder specifically so that its design does not structurally depend on which units the pilot happened to code.
+But because wave 2 is drawn from the full population, it can by chance recode a unit that was already coded in the pilot; that unit's residual then contributes to both $\tauhat_1$ and $\tauhat_2$, inducing a small positive correlation between them that the formulas for the standard errors ignore.
+The pilot fraction $\rho$ is small by design, so this overlap, and the correlation it induces, should be a second-order effect in most regimes; treating it as exactly zero is a simplification, not a proven result, and the combined $\widehat{SE}(\tauhat_{\text{combo}})$ above should be read as mildly anti-conservative to the extent that overlap occurs.
+
+
+%% -----------------------------------------------------------
+\bibliography{references}
+
+\end{document}
