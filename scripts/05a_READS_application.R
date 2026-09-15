@@ -236,7 +236,7 @@ head(comparison_precoding %>% filter(min_stratum_size > 10),n=5)
 oracle_vs_precoding <- compare_oracle_vs_precoding(
     oracle_comparison = comparison_oracle,
     precoding_comparison = comparison_precoding,
-    top_n = 40
+    top_n =100
 )
 
 
@@ -277,7 +277,7 @@ strata_table <- dat %>%
   mutate(
     k=rep(1:n_distinct(dat$strata),2), 
     Z = Z,
-    `Predicted Quality` = gsub(" Yhat", "", strata),
+    `Predicted Quality` = gsub("Yhat_raw=", "", strata),
     `Mean Y` = sprintf("%.2f", mean_Yobs),
     `Mean Yhat` = sprintf("%.2f", mean_Yhat),
     `Mean Resid.` = sprintf("%.2f", mean_resid),
@@ -364,14 +364,15 @@ ggsave("figures/READS_pilot_strat_validation.pdf", pilot_val_plot,
 # Estimates output from a single run across all methods (Example of practical real-world use) ----
 
 # Single sample at 30% coding budget (first not including methods using small pilot for stratification selection)
-include_methods=c("Oracle","Subset","SRS","Stratified","Optimal","Stratified-Random","Optimal-Random","Optimal-Pilot-Pooled","Stratified-PilotSelect","Optimal-PilotSelect")
+include_methods=c("Oracle","Subset","SRS","Stratified","Optimal","Stratified-Random","Optimal-Permuted","Optimal-Reversed","Optimal-Pilot-Ind",
+                  "Optimal-Pilot-Pooled","Stratified-PilotSelect","Optimal-PilotSelect")
 
 set.seed(2025)
 compute_single_sample_estimates(dat, coding_fraction = coding_fraction, finite_pop=FALSE,pilot_frac=10/30) 
 
 set.seed(2025) # with pilot-based stratification selection
 single_estimates <- compute_single_sample_estimates(dat, coding_fraction = coding_fraction, finite_pop=FALSE,pilot_frac=10/30,
-                                pilot_select=TRUE, candidates=candidates, pilot_select_frac=0.05,min_cell=1)
+                            candidates=candidates, pilot_select_frac=0.05,min_cell=1)
 
 
 comparison_table <- create_comparison_table(single_estimates)
@@ -420,7 +421,7 @@ kbl(multi_summary,  format = "latex", booktabs = TRUE,
 forest_multi <- create_multi_sample_forest_plot(multi_estimates %>%  filter(method%in% include_methods), 
                                                 oracle_est = oracle$est,jitter_seed=1234)
 print(forest_multi)
-ggsave("figures/READS_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
+ggsave("figures/supplemental/READS_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
 
 
 scatter=oracle_vs_precoding$scatter_plot
@@ -476,182 +477,5 @@ mm
 
 
 
-
-# Retrospective Simulation Study ----
-# This is to see what would have happened in READS study if they had coded only a subsample using each method
-
-# Note: this mirrors our simulations and is just a sanity check that everything works as expected
-
-# Oracle Analysis (Using Full Data) ----
-
-# Oracle estimator - using all data
-oracle <- est_oracle(dat)
-tau_oracle <- oracle$est
-SE_oracle <- oracle$SE
-
-
-
-
-# Simulation parameters
-n_iter <- 1000
-coding_budgets <- seq(0.1, 0.9, by = 0.1)
-
-cores <- min(parallel::detectCores() - 2, 9)
-cl <- makeCluster(cores)
-registerDoParallel(cl)
-
-## Step 4.2: Run Simulation Across Budgets
-set.seed(12345)
-
-system.time({
-  results_empirical <- foreach(
-    h = coding_budgets,
-    .combine = 'rbind',
-    .packages = c("dplyr", "stratsampling")
-  ) %dorng% {
-    
-    n_code <- round(h * nrow(dat)/2)*2
-    
-    # Run 1000 iterations for this coding budget
-    res <- plyr::rdply(n_iter, one_iter_all(dat, n_code = n_code, finite_pop = T))
-    res$h <- h
-    res$n_code <- n_code
-    
-    return(res)
-  }
-})
-
-stopCluster(cl)
-
-# Save results
-saveRDS(results_empirical, "results/READS_empirical_results.rds")
-
-# Summarize across iterations
-performance_summary <- results_empirical %>%
-  mutate(
-    covers = (est - 1.96*SEhat <= tau_oracle) & (est + 1.96*SEhat >= tau_oracle)
-  ) %>%
-  group_by(method, h, n_code) %>%
-  summarise(
-    # Bias
-    mean_est = mean(est),
-    bias = mean(est) - tau_oracle,
-    
-    # Variance/SE
-    emp_SE = sd(est),
-    mean_SEhat = mean(SEhat),
-    
-    # MSE
-    MSE = mean((est - tau_oracle)^2),
-    
-    # Coverage
-    coverage = mean(covers),
-    
-    # Number of iterations
-    n_iter = n(),
-    
-    .groups = "drop"
-  )
-
-print(performance_summary)
-
-# Add oracle comparison
-performance_summary <- performance_summary %>%
-  mutate(
-    # Variance inflation vs. oracle
-    var_ratio_oracle = emp_SE^2 / SE_oracle^2,
-    
-    # Variance reduction vs. SRS
-    var_ratio_srs = emp_SE^2 / emp_SE[method == "SRS"]^2,
-    pct_reduction_srs = (1 - var_ratio_srs) * 100
-  )
-
-## Visualize Simulation Results
-# Empirical SE by method and budget
-p_emp_se <- performance_summary %>%
-  ggplot(aes(x = h, y = emp_SE, color = method)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 3) +    
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  #geom_hline(yintercept = SE_oracle, linetype = "dashed") +
-  #annotate("text", x = 0.5, y = SE_oracle * 0.95, 
-  #     label = "Oracle (Full Coding)", size = 3) +
-  scale_x_continuous(breaks=seq(0.1,0.9,by=0.1),limits=c(0.08,0.92),labels = scales::percent) +
-  scale_y_continuous(limits = c(0, 0.1), breaks=seq(0,0.1,by=0.02)) +
-  
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    title = "Empirical Standard Errors: Simulation Results",
-    x = "Proportion Coded",
-    y = "Empirical SE"
-  ) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-
-# Variance reduction vs SRS
-p_var_reduction <- performance_summary %>%
-  filter(!method %in% c("SRS","Subset")) %>%
-  ggplot(aes(x = h, y = pct_reduction_srs/100, color = method)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 3) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  scale_x_continuous(breaks=seq(0.1,0.9,by=0.1), limits=c(0.08,0.92),labels = scales::percent) +
-  scale_y_continuous(limits = c(0, 1), breaks=seq(0,1,by=0.20), labels = scales::percent) +
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    title = "Variance Reduction Relative to SRS",
-    x = "Proportion Coded",
-    y = "% Variance Reduction"
-  ) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-
-# Coverage rates
-p_coverage <- performance_summary %>%
-  ggplot(aes(x = h, y = coverage, color = method)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 3) +
-  geom_hline(yintercept = 0.95, linetype = "dashed") +
-  scale_x_continuous(labels = scales::percent) +
-  scale_y_continuous(limits = c(0.90, 1.0), labels = scales::percent) +
-  scale_color_brewer(palette = "Set1") +
-  labs(
-    title = "Coverage of 95% Confidence Intervals",
-    x = "Proportion Coded",
-    y = "Coverage Rate"
-  ) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-gridExtra::grid.arrange(p_emp_se, p_var_reduction,p_coverage, nrow = 3)
-# Combined plot
-p_combined <- gridExtra::grid.arrange(p_emp_se, p_var_reduction, nrow = 2)
-print(p_combined)
-ggsave("figures/READS_empirical_simulation_frontiers.pdf", p_combined,
-       width = 10, height = 12)
-
-# Detailed Analysis at Target Budget (How do simulations perform specifically at 30% coding?) ----
-# Filter to h = 0.30
-c=unique(results_empirical$h)[3]
-results_30 <- results_empirical %>% filter(h == c)
-
-# Summary table
-table_30 <- results_30 %>%
-  group_by(method) %>%
-  summarise(
-    N_coded = unique(n_code),
-    Mean_Est = mean(est),
-    Emp_SE = sd(est),
-    Mean_SEhat = mean(SEhat),
-    Coverage = mean((est - 1.96*SEhat <= tau_oracle) & 
-                      (est + 1.96*SEhat >= tau_oracle)),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    Var_Ratio_Oracle = (Emp_SE / SE_oracle)^2,
-    Var_Ratio_SRS = (Emp_SE / Emp_SE[method == "SRS"])^2,
-    Pct_Reduction = (1 - Var_Ratio_SRS) * 100
-  )
-
-print(table_30)
 
 

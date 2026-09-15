@@ -1,0 +1,254 @@
+\documentclass[12pt]{article}
+\usepackage[top=1in, bottom=1in, left=1in, right=1in]{geometry}
+\usepackage{amsthm,amsmath,amsfonts,amssymb}
+\usepackage{float}
+\usepackage[colorlinks,citecolor=blue,urlcolor=blue,linkcolor=blue]{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\setlength{\emergencystretch}{2em}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+% ---------------------------------------------------------------------
+% Macros copied from main_alt_rev.tex so the notation matches the paper
+% ---------------------------------------------------------------------
+\def\Var{\mbox{Var}}
+\def\E{\mathbb{E}}
+\newcommand{\var}[1]{\Var \! \left ( #1 \right )}
+\newcommand{\EE}[1]{\E \left [ #1 \right ]}
+\newcommand{\varest}[1]{\widehat{\Var }\! \left ( #1 \right )}
+\newcommand{\varkest}[1]{\widehat{\Var}_k \! \left ( #1 \right )}
+\newcommand{\varkZ}[1]{\Var_{k \mid \mathcal{Z}} \! \left ( #1 \right )}
+\newcommand{\varjZ}[1]{\Var_{j  \mid \mathcal{Z}} \! \left ( #1 \right )}
+\newcommand{\NzkZ}{N_{zk \mid\mathcal{Z}}}
+\newcommand{\NonekZ}{N_{1k \mid\mathcal{Z}}}
+\newcommand{\NzerokZ}{N_{0k \mid\mathcal{Z}}}
+\newcommand{\NzjZ}{N_{zj \mid\mathcal{Z}}}
+\newcommand{\nzkZ}{n_{zk \mid\mathcal{Z}}}
+\newcommand{\nonekZ}{n_{1k\mid\mathcal{Z}}}
+\newcommand{\nzerokZ}{n_{0k\mid\mathcal{Z}}}
+\newcommand{\yhat}[1]{\hat{Y}_\mathcal{S}(#1)}
+\newcommand{\szkZ}{s^2_{z k \mid \mathcal{Z}}}
+\newcommand{\ate}{ATE}
+\newcommand{\ateest}{\widehat{ATE}}
+\newcommand{\atesest}{\widehat{ATE}_S}
+
+% ---------------------------------------------------------------------
+% New macros introduced in this memo (candidates for the manuscript)
+% ---------------------------------------------------------------------
+\newcommand{\varkZpil}[1]{\widehat{\Var}^{(1)}_{k \mid \mathcal{Z}} \! \left ( #1 \right )}
+\newcommand{\varjZpil}[1]{\widehat{\Var}^{(1)}_{j \mid \mathcal{Z}} \! \left ( #1 \right )}
+\newcommand{\npzkZ}{n^{(1)}_{zk \mid \mathcal{Z}}}
+\newcommand{\npzjZ}{n^{(1)}_{zj \mid \mathcal{Z}}}
+\newcommand{\nszkZ}{n^{(2)}_{zk \mid \mathcal{Z}}}
+\newcommand{\npoolzkZ}{\hat{n}^{\,pool}_{zk \mid \mathcal{Z}}}
+\newcommand{\nindzkZ}{\hat{n}^{\,ind}_{zk \mid \mathcal{Z}}}
+\newcommand{\yhatpool}[1]{\hat{Y}^{\,pool}_{\mathcal{S}}(#1)}
+\newcommand{\yhatind}[1]{\hat{Y}^{\,ind}_{\mathcal{S}}(#1)}
+\newcommand{\atepool}{\widehat{ATE}_S^{\,pool}}
+\newcommand{\ateind}{\widehat{ATE}_S^{\,ind}}
+\newcommand{\cellsum}[1]{\sum_{\substack{i:Z_i=#1 \\ m_{i \mid \mathcal{Z}} = k}}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Pilot-based allocation estimators}
+
+\begin{document}
+\maketitle
+
+
+Let $\lambda \in (0,1)$ denote the pre-specified pilot share of the coding budget. With $n = n_0 + n_1$ the total budget, the pilot codes $n^{(1)} = \mathrm{round}(\lambda n)$ units, split across arms in proportion to the assignment probability (so $n^{(1)}_z = \mathrm{round}(n^{(1)}/2)$ under the balanced designs of the simulations). The strata are fixed and known before the pilot is drawn.
+
+The pilot is a \emph{proportional} stratified sample of the known strata: within arm $z$, the cell counts are
+\begin{equation}
+\label{eq:pilot_counts}
+\npzkZ \approx n^{(1)}_z \, \frac{\NzkZ}{N_z}, \qquad \sum_{k=1}^{K_{z \mid \mathcal{Z}}} \npzkZ = n^{(1)}_z ,
+\end{equation}
+integerised by largest-remainder apportionment and capped at $\NzkZ$, and the $\npzkZ$ pilot units of cell $(z,k)$ are drawn by simple random sampling from that cell. Let $S^{(1)}_i \in \{0,1\}$ indicate membership in the pilot, and let $e_i = Y_i - \hat{Y}_i$ denote the observed residual of a coded unit (that is, $e_i(Z_i)$). The pilot mean and pilot variance of the residuals in cell $(z,k)$ are
+\begin{align}
+\bar{e}^{(1)}_{zk \mid \mathcal{Z}} &= \frac{1}{\npzkZ} \cellsum{z} S^{(1)}_i \, e_i , \label{eq:pilot_mean}\\
+\varkZpil{e_i(z) \mid \mathcal{Z}} &= \frac{1}{\npzkZ - 1} \cellsum{z} S^{(1)}_i \big( e_i - \bar{e}^{(1)}_{zk \mid \mathcal{Z}} \big)^2 . \label{eq:pilot_var}
+\end{align}
+For any cell with $\npzkZ < 2$ the variance in \eqref{eq:pilot_var} is undefined and is replaced by the degrees-of-freedom-weighted pooled pilot variance of the arm,
+\begin{equation}
+\label{eq:pilot_var_pooled}
+\widehat{\Var}^{(1)}_{\cdot \mid \mathcal{Z}}\big( e_i(z) \mid \mathcal{Z} \big)
+ = \frac{\sum_{j} \big( \npzjZ - 1 \big)\, \varjZpil{e_i(z) \mid \mathcal{Z}}}{\sum_{j} \big( \npzjZ - 1 \big)} ,
+\end{equation}
+where both sums run over the cells of arm $z$ with at least two pilot units. 
+Both designs then use the plug-in Neyman weights
+\begin{equation}
+\label{eq:plugin_weights}
+\hat{w}_{zk} = \frac{\NzkZ \sqrt{\varkZpil{e_i(z) \mid \mathcal{Z}}}}{\sum_{j=1}^{K_{z \mid \mathcal{Z}}} \NzjZ \sqrt{\varjZpil{e_i(z) \mid \mathcal{Z}}}}, \qquad \sum_{k} \hat{w}_{zk} = 1,
+\end{equation}
+which depend on the pilot only through the cell variances \eqref{eq:pilot_var}, never through the cell means \eqref{eq:pilot_mean}. That distinction is what separates these two arms from the pilot-based selection arms, where the pilot cell means drive the choice of stratification.
+
+\section{Optimal-Pilot-Pooled: pilot retained (double sampling)}
+\label{sec:pooled}
+
+\paragraph{Allocation.} The pooled design allocates the \emph{total} arm budget $n_z$,
+\begin{equation}
+\label{eq:pilot_alloc_pool}
+\begin{aligned}
+\npoolzkZ &= \hat{w}_{zk}\, n_z \\
+&\text{subject to} \quad
+\max\{2, \npzkZ\} \;\le\; \npoolzkZ \;\le\; \NzkZ
+\quad \text{and} \quad
+\sum_{k=1}^{K_{z \mid \mathcal{Z}}} \npoolzkZ = n_z .
+\end{aligned}
+\end{equation}
+The constraints are imposed by the integer-feasibility adjustment: targets are rounded, cells whose target exceeds $\NzkZ$ are set to $\NzkZ$ and the remainder is re-allocated by weight, and the totals are reconciled to $n_z$ by trimming the cells with the most slack above their floor or topping up (by weight) the cells with room. The lower bound $\npzkZ$ reflects that pilot units cannot be un-sampled: a cell whose Neyman target falls below its realized pilot count keeps its pilot count, and the surplus is redistributed across the remaining cells. When an arm's budget is smaller than the sum of its floors, every cell is left at its floor and the arm is over budget (this is the sub-floor regime that produces the coverage dips reported in the Supplement).
+
+\paragraph{Second wave.} The second wave draws
+\begin{equation}
+\label{eq:wave2_pool}
+\nszkZ = \npoolzkZ - \npzkZ \;\ge\; 0
+\end{equation}
+units by simple random sampling from the $\NzkZ - \npzkZ$ not-yet-coded units of cell $(z,k)$. Let $S^{(2)}_i$ indicate the second wave, so that $S^{(1)}_i S^{(2)}_i = 0$ for every unit and the final coded sample is $S_i = S^{(1)}_i + S^{(2)}_i$, with realized cell sizes $\nzkZ = \npoolzkZ$ and realized sampling probability $\npoolzkZ / \NzkZ$ within the cell.
+
+\paragraph{Estimator.} The estimator is Equation 2 of the manuscript applied to the union of the two waves:
+\begin{equation}
+\label{eq:pilot_pool_est}
+\begin{aligned}
+\atepool &= \yhatpool{1} - \yhatpool{0}, \qquad \text{where} \\
+\yhatpool{z} &= \frac{1}{N_z} \sum_{i:Z_i=z} \hat{Y}_i
+ + \frac{1}{N_z} \sum_{k=1}^{K_{z \mid \mathcal{Z}}} \frac{\NzkZ}{\npoolzkZ} \cellsum{z} \big( S^{(1)}_i + S^{(2)}_i \big) \big( Y_i - \hat{Y}_i \big).
+\end{aligned}
+\end{equation}
+Equivalently, writing $\bar{e}^{(2)}_{zk \mid \mathcal{Z}}$ for the mean residual of the second-wave units in the cell, the residual adjustment for cell $(z,k)$ is $\NzkZ\, \bar{e}_{zk \mid \mathcal{Z}}$ with
+\begin{equation}
+\label{eq:pool_mean}
+\bar{e}_{zk \mid \mathcal{Z}} = \frac{\npzkZ\, \bar{e}^{(1)}_{zk \mid \mathcal{Z}} + \nszkZ\, \bar{e}^{(2)}_{zk \mid \mathcal{Z}}}{\npoolzkZ} ,
+\end{equation}
+so that pilot and second-wave units receive equal weight. This is the ``equal-weight pooling'' referred to in Appendix~C of the Supplement, and it is what distinguishes the pooled design from the precision-weighted two-phase combination used by the \emph{Pilot+} selection arms.
+
+\paragraph{Properties.} Conditional on the treatment assignment and on the realized allocation $\{\npoolzkZ\}$, the union of the two waves is treated as a simple random sample of size $\npoolzkZ$ from each cell, so Thm. 1 of the paper applies with $\nzkZ = \npoolzkZ$:
+\begin{equation}
+\label{eq:pool_var}
+\var{\atepool \mid \mathcal{Z}, \{\npoolzkZ\}} \approx \sum_{z} \sum_{k=1}^{K_{z \mid \mathcal{Z}}} \frac{\NzkZ (\NzkZ - \npoolzkZ)}{N_z^2\, \npoolzkZ}\, \varkZ{e_i(z) \mid \mathcal{Z}} .
+\end{equation}
+This is classical double sampling for allocation (Neyman, 1938; Cochran, 1977, Chapter~12). The approximation sign records the one place where the argument is not exact: the allocation depends on the pilot through the sample variances \eqref{eq:pilot_var}, and the pilot cell means and pilot cell variances are exactly independent only under normal residuals (they are asymptotically uncorrelated in general). Under that condition the adaptivity introduces no first-order bias, and the additional variability from estimating the allocation enters only through higher-order terms; inference is conditional on the realized allocation, which is the standard mode of inference for double sampling.
+
+\section{Optimal-Pilot-Ind: pilot discarded, fresh draw}
+\label{sec:ind}
+
+\paragraph{Allocation.} The discard design allocates only the budget \emph{remaining} after the pilot,
+\begin{equation}
+\label{eq:pilot_alloc_ind}
+\begin{aligned}
+\nindzkZ &= \hat{w}_{zk}\, \big( n_z - n^{(1)}_z \big) \\
+&\text{subject to} \quad
+2 \;\le\; \nindzkZ \;\le\; \NzkZ
+\quad \text{and} \quad
+\sum_{k=1}^{K_{z \mid \mathcal{Z}}} \nindzkZ = n_z - n^{(1)}_z ,
+\end{aligned}
+\end{equation}
+with the same integer-feasibility adjustment as before but without the pilot-count floor, since no pilot unit is carried into the estimation sample.
+
+\paragraph{Second wave.} A fresh stratified sample of these sizes is drawn by simple random sampling from \emph{all} $\NzkZ$ units of each cell. Pilot units are eligible to be redrawn (a redrawn pilot unit is already coded, so in practice it costs nothing further; the accounting in the simulations charges the full $n_z$ regardless). Let $S^{(2)}_i$ indicate this fresh sample, with $\nzkZ = \nindzkZ$. The pilot enters the design only through the variance estimates \eqref{eq:pilot_var}.
+
+\paragraph{Estimator.} The estimator is Equation 2 with $S_i = S^{(2)}_i$:
+\begin{equation}
+\label{eq:pilot_ind_est}
+\begin{aligned}
+\ateind &= \yhatind{1} - \yhatind{0}, \qquad \text{where} \\
+\yhatind{z} &= \frac{1}{N_z} \sum_{i:Z_i=z} \hat{Y}_i
+ + \frac{1}{N_z} \sum_{k=1}^{K_{z \mid \mathcal{Z}}} \frac{\NzkZ}{\nindzkZ} \cellsum{z} S^{(2)}_i \big( Y_i - \hat{Y}_i \big).
+\end{aligned}
+\end{equation}
+
+\paragraph{Properties.} Conditional on the pilot (and hence on the allocation), $S^{(2)}$ is an ordinary stratified simple random sample of the known strata, so $\ateind$ is exactly unbiased for the $\ate$ and
+\begin{equation}
+\label{eq:ind_var}
+\var{\ateind \mid \mathcal{Z}, S^{(1)}} = \sum_{z} \sum_{k=1}^{K_{z \mid \mathcal{Z}}} \frac{\NzkZ (\NzkZ - \nindzkZ)}{N_z^2\, \nindzkZ}\, \varkZ{e_i(z) \mid \mathcal{Z}}
+\end{equation}
+holds exactly, with no double-sampling argument required. The price is the pilot budget: the effective sample is $n_z - n^{(1)}_z = (1 - \lambda) n_z$ per arm, which is why the simulations find $\var{\ateind} / \var{\atepool}$ close to $1/(1-\lambda)$.
+
+\section{Variance estimation}
+\label{sec:varest}
+
+Both designs use the plug-in variance estimator of Appendix~A.3 of the Supplement unchanged,
+\begin{equation}
+\label{eq:varest}
+\begin{aligned}
+\varest{\atesest} &= \sum_{k=1}^{K_{z \mid \mathcal{Z}}} \left[ \frac{\NonekZ(\NonekZ - \nonekZ)}{N_1^2\, \nonekZ}\, \varkest{e_i(1)} + \frac{\NzerokZ(\NzerokZ - \nzerokZ)}{N_0^2\, \nzerokZ}\, \varkest{e_i(0)} \right] \\
+&\qquad + \frac{\hat{S}^2(1)}{N_1} + \frac{\hat{S}^2(0)}{N_0},
+\end{aligned}
+\end{equation}
+with $\nzkZ$ set to the realized allocation and $\varkest{e_i(z)}$ the sample variance of $Y_i - \hat{Y}_i$ over the units of cell $(z,k)$ with $S_i = 1$ (and $\hat{S}^2(z)$ built from the same units). For the pooled design these are the pilot and second-wave units together, $S_i = S^{(1)}_i + S^{(2)}_i$ and $\nzkZ = \npoolzkZ$; for the discard design they are the fresh-draw units only, $S_i = S^{(2)}_i$ and $\nzkZ = \nindzkZ$. The pilot variances \eqref{eq:pilot_var} are used for allocation only; they are not re-used in \eqref{eq:varest}. For the pooled design the resulting interval is conditional on the realized allocation, as in Section~\ref{sec:pooled}; for the discard design it is exact conditional on the pilot.
+
+\section{Side-by-side comparison}
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}L{3.6cm}L{5.6cm}L{5.6cm}@{}}
+\toprule
+ & \textbf{Optimal-Pilot-Pooled} & \textbf{Optimal-Pilot-Ind} \\
+\midrule
+Budget allocated by \eqref{eq:plugin_weights} & total arm budget $n_z$ & remaining budget $n_z - n^{(1)}_z$ \\
+Per-cell floor & $\max\{2, \npzkZ\}$ (pilot units cannot be un-sampled) & $2$ \\
+Second wave drawn from & the $\NzkZ - \npzkZ$ not-yet-coded units of the cell & all $\NzkZ$ units of the cell (pilot eligible again) \\
+Units in the estimator & $S_i = S^{(1)}_i + S^{(2)}_i$ & $S_i = S^{(2)}_i$ \\
+Realized $\nzkZ$ & $\npoolzkZ$ & $\nindzkZ$ \\
+Effective sample per arm & $n_z$ & $(1-\lambda)\, n_z$ \\
+Role of the pilot in estimation & equal-weight member of every cell mean & none (variances only) \\
+Validity & unbiased and \eqref{eq:pool_var} to first order, conditional on the realized allocation (double sampling; exact independence of pilot means and variances under normality) & exactly unbiased with variance \eqref{eq:ind_var}, conditional on the pilot; no conditions on the adaptivity \\
+Main advantage & no coded document is wasted & clean conditioning argument; serves as the robustness arm \\
+Main cost & inference conditional on the allocation; anti-conservative only in sub-floor cells & variance inflated by roughly $1/(1-\lambda)$ \\
+\bottomrule
+\end{tabular}
+\caption{The two pilot-based optimal allocation designs. Both use the same proportional stratified pilot, the same pilot variances \eqref{eq:pilot_var}, and the same plug-in Neyman weights \eqref{eq:plugin_weights}.}
+\label{tab:compare}
+\end{table}
+
+\section{Correspondence with the code}
+\label{sec:code}
+
+Table~\ref{tab:code} maps the symbols above to the corresponding objects in the \code{stratsampling} package and in \code{sim\_functions.R}. Two details of the implementation are worth recording because they fix quantities the notation leaves implicit. First, the per-arm budget is \code{n\_code / 2} and the per-arm pilot is \code{round(n\_pilot * 0.5)}, so $n_z = n/2$ and $n^{(1)}_z = \mathrm{round}(\mathrm{round}(\lambda n)/2)$; the proportional pilot counts $\npzkZ$ come from \code{apportion\_counts()} (largest remainders, capped at $\NzkZ$). Second, when \code{paired\_pilot} is \code{TRUE} in the fast path (and in \code{01b\_run\_sim\_pilot.R} once updated), the two arms share one pilot draw, so $S^{(1)}$, $\varkZpil{\cdot}$ and $\hat{w}_{zk}$ are identical across the two designs within an iteration and the comparison in Table~\ref{tab:compare} is paired; with \code{paired\_pilot} set to \code{FALSE} (the default in \code{one\_iter\_all()}) the discard arm draws its own pilot.
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}L{4.2cm}L{10.6cm}@{}}
+\toprule
+\textbf{Symbol} & \textbf{Code} \\
+\midrule
+$n$, $n_z$ & \code{n\_code}; \code{n\_code / 2} inside \code{calc\_optimal\_allocation()} \\
+$\lambda$, $n^{(1)}$ & \code{pilot\_frac}; \code{n\_pilot = round(pilot\_frac * n\_code)} \\
+$S^{(1)}_i$, $\npzkZ$ & \code{S\_pilot = generate\_sample\_index(dat, n\_pilot, Z, strata = "strata")}; column \code{n\_pilot.zk} \\
+$\varkZpil{\cdot}$, \eqref{eq:pilot_var_pooled} & \code{estimate\_pilot\_variances(dat, S = "S\_pilot", Z, strata)}: columns \code{var\_resid\_pilot}, \code{var\_pooled}, \code{var.alloc} (with \code{min\_pilot = 2}, \code{shrink = FALSE}) \\
+$\hat{w}_{zk}$ & \code{weight = N.zk * sqrt(var.alloc)}; \code{prop = weight / sum(weight)} within arm \\
+$\npoolzkZ$, $\nszkZ$ & \code{calc\_optimal\_allocation(dat, n\_code, var\_alloc = vt, S\_pilot = "S\_pilot", min\_n = 2)}: columns \code{n.zk}, \code{n\_new.zk}; second wave drawn from units with \code{.S\_pilot == 0} \\
+$\nindzkZ$ & \code{calc\_optimal\_allocation(dat, n\_code - n\_pilot\_realized, var\_alloc = vt, min\_n = 2)} (no \code{S\_pilot}): column \code{n.zk}; drawn from the full cell \\
+$S_i$ & column \code{S} returned by \code{calc\_optimal\_allocation()} (pilot $\cup$ second wave when \code{S\_pilot} is supplied, second wave alone otherwise) \\
+$\atepool$, $\ateind$, \eqref{eq:varest} & \code{est\_ma\_strat(dat.strat, Yhat = "Yhat", S = "S", Z, strata = "strata")}: \code{est}, \code{SEhat}, \code{SEhat.full}, \code{SEhat.samp}, \code{S2.0}, \code{S2.1} \\
+Wrapper & \code{one\_iter\_optimal\_pilot(dat, n\_code, pilot\_frac, Z, pool\_pilot = TRUE / FALSE)}; fast path \code{one\_iter\_pilot\_fast()} / \code{all\_arms\_fast()} \\
+\bottomrule
+\end{tabular}
+\caption{Symbols in this memo and the corresponding objects in the package and simulation scripts.}
+\label{tab:code}
+\end{table}
+
+\begin{remark}
+The paper's Section~3.4.1 describes the pooled design in words and Appendix~C of the Supplement gives the conditioning argument; neither currently displays \eqref{eq:pilot_alloc_pool} or \eqref{eq:pilot_pool_est}. If a displayed version is wanted, the shortest addition to Section~3.4.1 is Equation~\eqref{eq:pilot_alloc_pool} with the sentence ``the final estimator is \eqref{eq:ma_strat} applied to the pilot and second-wave units together, with $\nzkZ = \npoolzkZ$,'' and the discard variant can be stated in one sentence as the same rule applied to $n_z - n^{(1)}_z$ with a fresh draw. The macros \code{\textbackslash varkZpil}, \code{\textbackslash npzkZ}, \code{\textbackslash npoolzkZ} and \code{\textbackslash nindzkZ} defined in the preamble of this memo can be copied into \code{main\_alt\_rev.tex} as they are.
+\end{remark}
+
+\section*{Key takeaways}
+
+Both designs are Equation~\eqref{eq:ma_strat} with the oracle variances in the Neyman rule \eqref{eq:optimal_alloc} replaced by pilot sample variances, and the plug-in weights \eqref{eq:plugin_weights} depend on the pilot only through those variances. The pooled design allocates the full budget $n_z$, floors each cell at its pilot count, tops up from the not-yet-coded units, and estimates on pilot plus second wave with equal weights; it is valid conditional on the realized allocation by the double-sampling argument. The discard design allocates $(1-\lambda) n_z$, redraws from the whole cell, and estimates on the fresh draw alone; it is exactly valid conditional on the pilot but forfeits the pilot's share of the budget, so its variance is inflated by roughly $1/(1-\lambda)$ relative to pooling. Neither design involves the precision-weighted two-phase combination, which belongs to the pilot-based selection arms where the pilot cell means, not just the variances, inform the design.
+
+\section*{References}
+
+\begin{itemize}[leftmargin=*, itemsep=2pt]
+\item Cochran, W.\ G.\ (1977). \emph{Sampling Techniques}, 3rd ed. Wiley, New York. Chapter 12 (double sampling).
+\item Neyman, J.\ (1934). On the two different aspects of the representative method. \emph{Journal of the Royal Statistical Society}, 97(4), 558--625.
+\item Neyman, J.\ (1938). Contribution to the theory of sampling human populations. \emph{Journal of the American Statistical Association}, 33(201), 101--116.
+\end{itemize}
+
+\end{document}

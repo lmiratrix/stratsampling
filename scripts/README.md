@@ -30,4 +30,4 @@ Each case study follows the same three-stage shape: prep raw data → get LLM/su
 
 - Match the numeric-prefix (`NN_description.R`) or `NNx_description.R` naming convention for a new pipeline stage, and the `04*_get_llm_scores_*`/`05*_*_application` convention for a new applied dataset.
 - Put shared helpers in the matching `*_functions.R` file (`sim_functions.R`, `application_functions.R`, `plotting_functions.R`) rather than inlining them in a numbered script.
-- Never hardcode API keys (OpenAI, etc.) in these scripts — read them from the environment (e.g. `Sys.getenv("OPENAI_API_KEY")`, set via `.Renviron`), not `Sys.setenv()` with a literal key string.
+- Never hardcode API keys (OpenAI, etc.) in these scripts — read them from the environment (e.g. `Sys.getenv("OPENAI_API_KEY")`, set via `.Renviron`), not `Sys.setenv()` with a literal key string.leas

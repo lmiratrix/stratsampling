@@ -11,6 +11,9 @@
 #
 # n_code is the TOTAL budget everywhere (pilot included), so all
 # methods at a given coding fraction are directly comparable.
+
+# Compared to 01_run_full_sim.R, this script focuses on performance of the pilot-based estimators
+# across different pilot fractions (fraction of the total coding budget used for the pilot)
 # =====================================================================
 
 library(dplyr)
@@ -24,7 +27,7 @@ source("scripts/sim_functions.R")
 
 #PILOT_FRACS <- c(1/5,1/4,1/3, 1/2,3/5,3/4)   # share of the coding budget spent on the pilot
 
-PILOT_FRACS <- sort(c(seq(0.1,0.7,by=0.1),1/4,1/3,2/3,3/4))  # share of the coding budget spent on the pilot
+PILOT_FRACS <- sort(c(seq(0.2,0.7,by=0.1),1/4,1/3,2/3,3/4))  # share of the coding budget spent on the pilot
 PILOT_FRACS
 
 n_iter      <- 1000             # set to e.g. 100 for a test run
@@ -47,9 +50,10 @@ cli::cli_inform("Total simulation scenarios: {nrow(param_grid)}\n")
 
 
 # ---------------------------------------------------------------------
-# One iteration: 3 baselines + 2 pilot arms per pilot fraction,
+# One iteration: 3 baselines + 2 pilot allocation arms + 2 pilot selection arms per pilot fraction,
 # all on the same population draw
 # ---------------------------------------------------------------------
+
 
 one_iter_pilot_study = function(params, pilot_fracs = PILOT_FRACS) {
     
@@ -66,30 +70,45 @@ one_iter_pilot_study = function(params, pilot_fracs = PILOT_FRACS) {
     out.prop   = one_iter_strat(dat, n_code, Z = "Z");    out.prop$method   = "Stratified"
     out.opt    = one_iter_optimal_strat(dat, n_code, Z = "Z"); out.opt$method = "Optimal"
     out.opt_rand = one_iter_optimal_wrong(dat, n_code, Z= "Z", distort="random"); out.opt_rand$method = "Optimal-Random"
-
-    base = bind_rows( out.prop, out.opt, out.opt_rand) %>%
+    out.opt_perm = one_iter_optimal_wrong(dat, n_code, Z= "Z", distort="permute"); out.opt_perm$method = "Optimal-Permuted"
+    
+    
+    base = bind_rows( out.prop, out.opt, out.opt_rand,out.opt_perm) %>%
         mutate(pilot_frac = NA_real_)
     
     # Pilot arms: fresh pilot draw per (fraction x mode) on the same
     # population. suppressWarnings() silences the expected thin-cell
     # fallback messages at small pilots (verified once interactively).
+    # Pilot arms: ONE proportional stratified pilot per fraction, shared
+    # by the Pooled and Ind arms (paired comparison); fresh SRS pilot for
+    # the selection arms. suppressWarnings() silences the expected
+    # thin-cell fallback / below-floor messages at small pilots.
     pilots = purrr::map_dfr(pilot_fracs, function(pf) {
         n_pilot = round(pf * n_code)
         dat$S_pilot = generate_sample_index(dat, n_pilot, Z = "Z", strata = "strata")
         vt = suppressWarnings(
             estimate_pilot_variances(dat, S = "S_pilot", Z = "Z", strata = "strata"))
         
-        d_pool = calc_optimal_allocation(dat, n_code, Z = "Z", strata = "strata",
-                                         var_alloc = vt, S_pilot = "S_pilot")
+        # Pooled: wave 2 tops the pilot up to the total budget
+        d_pool = suppressWarnings(
+            calc_optimal_allocation(dat, n_code, Z = "Z", strata = "strata",
+                                    var_alloc = vt, S_pilot = "S_pilot"))
         pool = est_ma_strat(d_pool, Yhat = "Yhat", S = "S", Z = "Z", strata = "strata")
         pool$method = "Optimal-Pilot-Pooled"
         
-        d_ind = calc_optimal_allocation(dat, n_code - sum(dat$S_pilot),
-                                        Z = "Z", strata = "strata", var_alloc = vt)
+        # Ind: same pilot informs the variances only; fresh draw of the
+        # remaining budget from the full population
+        d_ind = suppressWarnings(
+            calc_optimal_allocation(dat, n_code - sum(dat$S_pilot),
+                                    Z = "Z", strata = "strata", var_alloc = vt))
         ind = est_ma_strat(d_ind, Yhat = "Yhat", S = "S", Z = "Z", strata = "strata")
         ind$method = "Optimal-Pilot-Ind"
         
-        bind_rows(pool, ind) %>% mutate(pilot_frac = pf)
+        select = suppressWarnings(
+            one_iter_pilot_select(dat, n_code, candidates = NULL,
+                                  pilot_select_frac = pf, Z = "Z"))
+        
+        bind_rows(pool, ind, select) %>% mutate(pilot_frac = pf)
     })
     
     bind_rows(base, pilots) %>%
@@ -106,8 +125,9 @@ one_iter_pilot_study = function(params, pilot_fracs = PILOT_FRACS) {
         select(method, pilot_frac, everything())
 }
 
+
 if (FALSE) {
-    # Test one iteration: expect 4 + 2*length(PILOT_FRACS) = 10 rows
+    # Test one iteration: expect 4 + 4*length(PILOT_FRACS)  rows
     one_iter_pilot_study(param_grid[1, ])
 }
 

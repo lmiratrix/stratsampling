@@ -92,11 +92,7 @@ compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, f
     # Run one iteration of all methods using the shared simulation function
     results = one_iter_all(dat, n_code = n_code, Z = Z, finite_pop = finite_pop, pilot_frac = pilot_frac)
     
-    if (pilot_select){
-        pilot_select_results=one_iter_pilot_select(dat,n_code=n_code,Z="Z",...)
-        results=full_join(results,pilot_select_results)
-        
-    }
+   
     # Add oracle for comparison
     oracle_est = est_oracle(dat,Z=Z)
     
@@ -154,9 +150,9 @@ create_forest_plot = function(estimates, oracle_est = NULL, tx=TRUE) {
     xlab_name = ifelse(tx, "Estimated Treatment Effect (Effect Size Units)", "Estimated Mean")
     
     # Order methods logically
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                     "Stratified-PilotSelect","Optimal-PilotSelect")
+    method_order =  c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                      "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                      "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
     estimates = estimates %>%
         mutate(method = factor(method, levels = rev(method_order)))
     
@@ -207,9 +203,9 @@ create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, t
     
     
     # Order methods logically
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                     "Stratified-PilotSelect","Optimal-PilotSelect")
+    method_order =   c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                       "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                       "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
     
     # Separate oracle (only need one) from other methods
     oracle_data = multi_estimates %>%
@@ -305,11 +301,9 @@ create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, t
 #' @return Formatted data frame
 create_comparison_table = function(estimates) {
     
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal",
-                     "Stratified-Random",
-                     "Optimal-Permuted","Optimal-Reversed",  "Optimal-Random",
-                     "Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                     "Stratified-PilotSelect","Optimal-PilotSelect")
+    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                     "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
     
     oracle_se = estimates$SE[estimates$method == "Oracle"]
     
@@ -343,9 +337,9 @@ create_comparison_table = function(estimates) {
 #' @return Summary data frame
 create_multi_sample_summary = function(multi_estimates) {
     
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                     "Stratified-PilotSelect","Optimal-PilotSelect")
+    method_order =  c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
+                      "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
+                      "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
     
     oracle_data = multi_estimates %>%
         filter(method == "Oracle") %>%

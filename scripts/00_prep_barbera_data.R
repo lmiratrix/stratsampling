@@ -10,7 +10,7 @@ library(lubridate)
 
 # One row per coder-article. Columns: articleid, headline, date, text,
 # relevance ("yes"/"no"/missing), positivity (1-9 scale).
-raw <- read.csv("Barbera 2020/data/5AC.csv",
+raw <- read.csv("raw data/Barbera-5AC.csv",
                 stringsAsFactors = FALSE,
                 na.strings = c("", "NA"))
 

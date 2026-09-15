@@ -24,7 +24,7 @@ library(stratsampling)
 source("scripts/sim_functions.R")
 
 
-one_iter = function(params, pilot_frac=NULL) {
+one_iter = function(params, pilot_frac=1/3) {
   
   dat = generate_population(N=params$N, n_strat=params$n_strat,
                             strata_config=params$strata_config,
@@ -73,7 +73,7 @@ n_iter=1000
 set.seed(1234)
 
 system.time(
-    results <- foreach(i=1:nrow(param_grid),  .packages = c("dplyr","stratsampling")) 
+    results <- foreach(i=1:nrow(param_grid),  .packages = c("dplyr","stratsampling"),.options.RNG=1234) 
     %dorng% {
         plyr::rdply(n_iter, one_iter(param_grid[i,])) 
         }
@@ -88,7 +88,7 @@ saveRDS(results,file="results/sim_results_balanced_exact_strata_all.rds")
 set.seed(1234)
 param_grid$strata_config="balanced-approx"
 system.time(
-    results2 <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling")) %dorng% {
+    results2 <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling"),.options.RNG=1234) %dorng% {
         plyr::rdply(n_iter, one_iter( param_grid[i,]))  # Run 1000 iterations
     }
 )
@@ -101,7 +101,7 @@ saveRDS(results2,file="results/sim_results_balanced_approx_strata_all.rds")
 set.seed(1234)
 param_grid$strata_config="unbalanced"
 system.time(
-    results3 <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling")) %dorng% {
+    results3 <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling"),.options.RNG=1234) %dorng% {
         plyr::rdply(n_iter, one_iter(param_grid[i,]))  # Run 1000 iterations
     }
 )
@@ -160,7 +160,7 @@ sim_oracle = function(params) {
 }
 
 set.seed(1234)
-results.oracle <- foreach(i=1:nrow(params_oracle), .combine = 'rbind', .packages = c("dplyr","stratsampling")) %dorng% {
+results.oracle <- foreach(i=1:nrow(params_oracle), .combine = 'rbind', .packages = c("dplyr","stratsampling"),.options.RNG=1234) %dorng% {
     params <- params_oracle[i,]
     res <- plyr::rdply(n_iter, sim_oracle(params))  # Run 1000 iterations
     return(res)

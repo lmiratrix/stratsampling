@@ -23,20 +23,22 @@ method_levels <- c(
     "Stratified-Random",
     "Optimal",
     "Optimal-Random",
+    "Optimal-Reversed",
+    "Optimal-Permuted",
     "Full coding"
 )
 
 
 # Load simulation results
-results1=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_exact_strata_all.rds")
-results2=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_balanced_approx_strata_all.rds")
-results3=readRDS("~/Dropbox/text and RCT sampling math notes/stratsampling/results/sim_results_unbalanced_strata_all.rds")
+results1=readRDS("results/sim_results_balanced_exact_all_fast.rds")
+results2=readRDS("results/sim_results_balanced_approx_all_fast.rds")
+results3=readRDS("results/sim_results_unbalanced_all_fast.rds")
 
 results=rbind(results1,results2,results3)
 
 
 
-results_oracle <- readRDS("results/sim_results_oracle.rds")
+results_oracle <- readRDS("results/sim_results_oracle_fast.rds")
 
 
 
@@ -196,7 +198,7 @@ importance_all %>%
 #' Create variable importance plot for one method
 plot_importance_single <- function(importance_df, top_n = 15) {
     
-    method_name <- unique(importance_df$method)
+    method_name <- as.character(unique(importance_df$method))
     
     plot_data <- importance_df %>%
         slice_max(abs_std_coefficient, n = top_n) %>%
@@ -208,7 +210,7 @@ plot_importance_single <- function(importance_df, top_n = 15) {
         scale_fill_manual(values = c("TRUE" = "#2166ac", "FALSE" = "#b2182b"),
                           labels = c("Decreases SE", "Increases SE"),
                           name = "Effect Direction") +
-        labs(
+        ggplot2::labs(
             title = paste("Variable Importance:", method_name),
             subtitle = "Top 15 predictors of log(Empirical SE)",
             x = "|Standardized Coefficient|",
@@ -243,7 +245,7 @@ p_combined <- importance_all %>%
     scale_fill_manual(values = c("TRUE" = "#2166ac", "FALSE" = "#b2182b"),
                       labels = c("Decreases SE", "Increases SE"),
                       name = "Effect Direction") +
-    labs(
+    ggplot2::labs(
         title = "Variable Importance by Method",
         subtitle = "Top 15 predictors of log(Empirical SE) for each method",
         x = "|Standardized Coefficient|",
@@ -260,7 +262,7 @@ p_combined <- importance_all %>%
 print(p_combined)
 
 # Save plot
-ggsave("figures/variable_importance_by_method.pdf", p_combined, 
+ggsave("figures/supplemental/variable_importance_by_method.pdf", p_combined, 
        width = 8, height = 10)
 
 
@@ -314,7 +316,7 @@ plot_coefficients_comparison <- function(importance_df, top_n = NULL,
                            breaks = breaks,
                            labels = labels) +
         scale_color_manual(name = "Method", values = method_pal) +
-        labs(
+        ggplot2::labs(
             title = "Effect on Standard Error by Method",
             subtitle = "Top predictors of empirical SE across all methods (with 95% CI)",
             x = "% Change in SE (log scale)",
@@ -339,7 +341,7 @@ p2 <- plot_coefficients_comparison(importance_all,top_n=20,methods=c("SRS","Stra
 print(p2)
 
 
-p3<- plot_coefficients_comparison(importance_all,top_n=20,methods=c("SRS","Optimal","Optimal-Permuted","Optimal-Reversed"))
+p3<- plot_coefficients_comparison(importance_all,top_n=20,methods=c("SRS","Optimal","Optimal-Permuted","Optimal-Reversed","Optimal-Random"))
 print(p3)
 
 
@@ -347,7 +349,7 @@ p_comparison_main <- plot_coefficients_comparison(importance_main)
 p_comparison_main
 
 
-ggsave("figures/coefficient_comparison_with_CI_main_effects_only.pdf", 
+ggsave("figures/supplemental/coefficient_comparison_with_CI_main_effects_only.pdf", 
        p_comparison_main, width = 8, height = 8)
 
 
@@ -381,7 +383,7 @@ plot_coefficients_comparison_faceted <- function(importance_df,top_n=NULL, metho
         facet_wrap(~method,scales = "free_x") +
         scale_color_manual(values = c("Significant" = "#d7191c", "Not Significant" = "grey60"),
                            name = "Statistical Significance") +
-        labs(
+        ggplot2::labs(
             title = "Standardized Coefficients by Method",
             subtitle = "Top predictors (with 95% CI)",
             x = "Standardized Coefficient",
@@ -401,7 +403,7 @@ plot_coefficients_comparison_faceted <- function(importance_df,top_n=NULL, metho
 p_comparison_faceted <- plot_coefficients_comparison_faceted(importance_all,top_n=10, methods=c("SRS","Stratified","Stratified-Random","Optimal","Optimal-Reversed"))
 print(p_comparison_faceted)
 
-ggsave("figures/coefficient_comparison_faceted.pdf", p_comparison_faceted,
+ggsave("figures/supplemental/coefficient_comparison_faceted.pdf", p_comparison_faceted,
        width = 10, height = 12)
 
 
@@ -436,11 +438,11 @@ create_coefficient_table <- function(model_results, top_n = 50) {
     return(coef_table)
 }
 
-coef_table <- create_coefficient_table(models, top_n = 50)
+coef_table <- create_coefficient_table(models[c("Subset","SRS","Stratified","Optimal")], top_n = 50)
 
 
 # Export to CSV
-write_csv(coef_table, "results/coefficient_table_with_CI.csv")
+write_csv(coef_table, "tables/supplemental/coefficient_table_with_CI.csv")
 
 # Print formatted table
 library(knitr)
@@ -450,7 +452,7 @@ coef_table %>%
     kable(format = "latex", booktabs = TRUE, 
           caption = "Coefficient Estimates with 95% Confidence Intervals") %>%
     kable_styling(latex_options = c("scale_down", "hold_position")) %>%
-    cat(file = "tables/coefficient_comparison_table.tex")
+    cat(file = "tables/supplemental/coefficient_comparison_table.tex")
 
 print(coef_table)
 

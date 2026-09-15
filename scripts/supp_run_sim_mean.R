@@ -57,7 +57,6 @@ if ( FALSE ) {
     params = param_grid[1,]
     one_iter( params )
     
-    one_iter(params, pilot_frac=0.4)
     
 }
 
@@ -76,7 +75,7 @@ n_iter=1000
 set.seed(1234)
 
 system.time(
-    results <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling")) %dorng% {
+    results <- foreach(i=1:nrow(param_grid), .packages = c("dplyr","stratsampling"),.options.RNG=1234) %dorng% {
         plyr::rdply(n_iter, one_iter(param_grid[i,]))  # Run 1000 iterations
     }
 )

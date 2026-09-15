@@ -193,80 +193,88 @@ one_iter_optimal_pilot = function(dat, n_code, pilot_frac = 0.05,
 
 
 
-# Function to compute all three types of model-assisted estimators in one pass
+
+
+# Function to compute all three types of model-assisted estimators, plus bad-design versions and pilot-based variants in one pass
 one_iter_all <- function(dat, n_code, Z="Z", finite_pop=FALSE, 
                          include_rand=TRUE, pilot_frac=NULL) {
-  require( stratsampling ) # for parallel code
-
-
+    require( stratsampling ) # for parallel code
+    
+    
     #### Subset ESTIMATOR ####
-
+    
     out.subset=one_iter_subset(dat, n_code, finite_pop=finite_pop)
     out.subset$method <- "Subset"
-
-
-  #### SRS ESTIMATOR ####
-
-  out.srs=one_iter_srs(dat, n_code, finite_pop=finite_pop)
-  out.srs$method <- "SRS"
-
-  #### PROPORTIONAL STRATIFIED ESTIMATOR ####
-  out.strat_prop = one_iter_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
-  out.strat_prop$method = "Stratified"
-
-  #### OPTIMAL STRATIFIED ESTIMATOR ####
-  out.strat_opt = one_iter_optimal_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
-  out.strat_opt$method = "Optimal"
-
-  
-  #### PROPORTIONAL STRATIFIED ESTIMATOR (WRONG STRATA) ####
-  out.strat_random = one_iter_random_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
-  out.strat_random$method = "Stratified-Random"
-  
-  #### OPTIMAL STRATIFIED ESTIMATOR (WRONG VARIANCE PARAMETERS - PERMUTED) ####
-  out.strat_opt_perm = one_iter_optimal_wrong(dat, n_code, Z=Z, distort="permute", finite_pop=finite_pop)
-  out.strat_opt_perm$method = "Optimal-Permuted"
-  
-  #### OPTIMAL STRATIFIED ESTIMATOR (WRONG VARIANCE PARAMETERS - REVERSED) ####
-  out.strat_opt_rev = one_iter_optimal_wrong(dat, n_code, Z=Z, distort="reverse", finite_pop=finite_pop)
-  out.strat_opt_rev$method = "Optimal-Reversed"
-  
-  
-  
-  out_combined = bind_rows(out.subset, out.srs, out.strat_prop, out.strat_opt,
-                           out.strat_random, out.strat_opt_perm, out.strat_opt_rev) 
-  
-  if (include_rand){
-  #### OPTIMAL STRATIFIED ESTIMATOR (WRONG VARIANCE PARAMETERS - RANDOM) ####
-    out.strat_opt_rand = one_iter_optimal_wrong(dat, n_code, Z=Z, distort="random", finite_pop=finite_pop)
-    out.strat_opt_rand$method = "Optimal-Random"
-  
-    out_combined = bind_rows(out_combined, out.strat_opt_rand)
-  
-  }
-
-  
-  if ( !is.null( pilot_frac ) ) {
-      out.strat_pilot_pool = one_iter_optimal_pilot(dat, n_code,
-                                               pilot_frac = pilot_frac,
-                                               Z = Z, finite_pop = finite_pop,
-                                               pool_pilot = T)
-      out.strat_pilot_pool$method = "Optimal-Pilot-Pooled"
-
-      out.strat_pilot_ind = one_iter_optimal_pilot(dat, n_code,
-                                                    pilot_frac = pilot_frac,
-                                                    Z = Z, finite_pop = finite_pop,
-                                                    pool_pilot = F)
-      out.strat_pilot_ind$method = "Optimal-Pilot-Ind"
-      out_combined = bind_rows(out_combined, out.strat_pilot_pool,out.strat_pilot_ind)
-      out_combined$pilot_frac = pilot_frac
-  }
-  
-  out_combined = out_combined %>%
-      relocate( method )
-
-  # Return the combined results
-  return(out_combined)
+    
+    
+    #### SRS ESTIMATOR ####
+    
+    out.srs=one_iter_srs(dat, n_code, finite_pop=finite_pop)
+    out.srs$method <- "SRS"
+    
+    #### PROPORTIONAL STRATIFIED ESTIMATOR ####
+    out.strat_prop = one_iter_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
+    out.strat_prop$method = "Stratified"
+    
+    #### OPTIMAL STRATIFIED ESTIMATOR ####
+    out.strat_opt = one_iter_optimal_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
+    out.strat_opt$method = "Optimal"
+    
+    
+    #### PROPORTIONAL STRATIFIED ESTIMATOR (WRONG STRATA) ####
+    out.strat_random = one_iter_random_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
+    out.strat_random$method = "Stratified-Random"
+    
+    #### OPTIMAL STRATIFIED ESTIMATOR (WRONG VARIANCE PARAMETERS - PERMUTED) ####
+    out.strat_opt_perm = one_iter_optimal_wrong(dat, n_code, Z=Z, distort="permute", finite_pop=finite_pop)
+    out.strat_opt_perm$method = "Optimal-Permuted"
+    
+    #### OPTIMAL STRATIFIED ESTIMATOR (WRONG VARIANCE PARAMETERS - REVERSED) ####
+    out.strat_opt_rev = one_iter_optimal_wrong(dat, n_code, Z=Z, distort="reverse", finite_pop=finite_pop)
+    out.strat_opt_rev$method = "Optimal-Reversed"
+    
+    
+    
+    out_combined = bind_rows(out.subset, out.srs, out.strat_prop, out.strat_opt,
+                             out.strat_random, out.strat_opt_perm, out.strat_opt_rev) 
+    
+    if (include_rand){
+        #### OPTIMAL STRATIFIED ESTIMATOR (WRONG VARIANCE PARAMETERS - RANDOM) ####
+        out.strat_opt_rand = one_iter_optimal_wrong(dat, n_code, Z=Z, distort="random", finite_pop=finite_pop)
+        out.strat_opt_rand$method = "Optimal-Random"
+        
+        out_combined = bind_rows(out_combined, out.strat_opt_rand)
+        
+    }
+    
+    
+    if ( !is.null( pilot_frac ) ) {
+        out.strat_pilot_pool = one_iter_optimal_pilot(dat, n_code,
+                                                      pilot_frac = pilot_frac,
+                                                      Z = Z, finite_pop = finite_pop,
+                                                      pool_pilot = T)
+        out.strat_pilot_pool$method = "Optimal-Pilot-Pooled"
+        
+        out.strat_pilot_ind = one_iter_optimal_pilot(dat, n_code,
+                                                     pilot_frac = pilot_frac,
+                                                     Z = Z, finite_pop = finite_pop,
+                                                     pool_pilot = F)
+        out.strat_pilot_ind$method = "Optimal-Pilot-Ind"
+        
+        
+        
+        out.pilot_select = suppressWarnings(one_iter_pilot_select(dat, n_code, candidates=NULL, pilot_select_frac=pilot_frac,
+                                                                  Z=Z, finite_pop=finite_pop))
+        
+        out_combined = bind_rows(out_combined, out.strat_pilot_pool,out.strat_pilot_ind, out.pilot_select)
+        out_combined$pilot_frac = pilot_frac
+    }
+    
+    out_combined = out_combined %>%
+        relocate( method )
+    
+    # Return the combined results
+    return(out_combined)
 }
 
 
@@ -366,10 +374,10 @@ one_iter_pilot_select = function(dat, n_code, candidates,
     require( stratsampling )
     
     if (!is.null(Z)){
-        n_pilot = round( pilot_select_frac * nrow(dat) / 2 )*2
+        n_pilot = round( pilot_select_frac * n_code / 2 )*2
     }
     else{
-        n_pilot = round( pilot_select_frac * nrow(dat))
+        n_pilot = round( pilot_select_frac * n_code)
         
     }
   
@@ -379,9 +387,14 @@ one_iter_pilot_select = function(dat, n_code, candidates,
     # Wave 1: SRS pilot (within arm); no stratification exists yet
     dat$S_pilot = generate_sample_index( dat, n_pilot, Z = Z, strata = NULL )
     
+    
     # Choose the stratification via the pilot-mode diagnostic.
     # Candidates the pilot cannot evaluate (NA pilot spread) sort last
     # and are never chosen.
+    
+    if (is.null(candidates)){
+        candidates = create_stratification_candidates(dat,vars="Yhat",Z=Z,verbose=F)
+    }
     cmp = compare_stratifications_precoding( dat, candidates, Z = Z,
                                              Yobs = Yobs, S = "S_pilot" )
    
