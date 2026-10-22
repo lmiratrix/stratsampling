@@ -24,7 +24,7 @@ library(stratsampling)
 source("scripts/sim_functions.R")
 
 
-one_iter = function(params, pilot_frac=1/3) {
+one_iter = function(params, pilot_frac=1/5) {
   
   dat = generate_population(N=params$N, n_strat=params$n_strat,
                             strata_config=params$strata_config,
@@ -34,7 +34,8 @@ one_iter = function(params, pilot_frac=1/3) {
 
   n_code = round(params$N * params$coding_budget)
 
-  res <- one_iter_all(dat, n_code, include_rand=TRUE, pilot_frac=pilot_frac) %>%
+  res <- one_iter_all(dat, n_code, include_rand=TRUE, pilot_frac=pilot_frac,  add_selection_covs=T,
+                      min_pilot_cell=1) %>%
     mutate(N=params$N,
            n_code = n_code,
            n_strat=params$n_strat,

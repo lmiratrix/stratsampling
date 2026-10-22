@@ -11,7 +11,7 @@ library(rpart)
 library(gt)
 
 #library(plyr)
-
+##  Data cleaning and summary measures ----
 
 # Load the data
 load("generated data/barbera-data-with-all-LLM-predictions.RData")
@@ -104,9 +104,7 @@ p3 <- ggplot(dat, aes(x = Yhat, y = abs_resid)) +
 gridExtra::grid.arrange(p1, p2, p3, nrow = 3)
 #ggsave("figures/barbera_empirical_prediction_quality.pdf",  width = 10, height = 12)
 
-# -----------------------------------------------------------------------------
-#  Explore Potential Stratification Variables
-# -----------------------------------------------------------------------------
+#  Explore Potential Stratification Variables ----
 
 # Create categorical versions. Yhat is on the (standardized) 1-9 Barbera
 # positivity scale; confidence ratings remain on 0-100 from the LLM call.
@@ -189,7 +187,8 @@ gridExtra::grid.arrange(p_length, p_pred, p_conf, ncol= 3)
 #  gridExtra::grid.arrange(p_length, p_pred, nrow = 2)#,
 # width = 10, height = 8)
 
-##  Create and Evaluate Candidate Stratifications
+#  Create Candidate Stratifications ----
+
 library(stratsampling)
 dat$Yhat_binned = cut(dat$Yhat_raw, breaks=c(0, 2,3,4, 5, 6, 9)) # group rare very low/high scores with closest values
 dat$all_agree = ifelse(dat$n_distinct_Yhat==1,1,0)
@@ -203,7 +202,7 @@ candidates = create_stratification_candidates( dat,
     cross_custom = F)
     
 
-
+#  Compare Candidates using Oracle Information ----
 # Evaluate all candidates
 comparison_oracle <- compare_stratifications(dat, candidates, Z=NULL, min_var_threshold = 0.01) # comparison using residuals (not feasible in practice)
 comparison_precoding <- compare_stratifications_precoding(dat, candidates,Z=NULL) # comparison based on Yhat only (can be done before coding has started)
@@ -233,16 +232,16 @@ oracle_vs_precoding <- compare_oracle_vs_precoding(
 
 # View scatter plot
 print(oracle_vs_precoding$scatter_plot)
-ggsave("figures/barbera_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
+ggsave("figures/supplemental/barbera_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
 
 
 # Compare variance decomposition oracle vs. precoding
 results <- compare_decomposition_oracle(dat, candidates, n_code = floor(0.3*nrow(dat)),Z=NULL)
 results$summary  # View table
 
-decomp=plot_decomposition_comparison(results,show_components = F,top_n=40)
+decomp=plot_decomposition_comparison(results,show_components = F,top_n=30,selected="Yhat_binned_all_agree")
 decomp
-ggsave("figures/barbera_precoding_strat_variance-reduction.pdf",decomp,  width = 8, height = 6)
+ggsave("figures/supplemental/barbera_precoding_strat_variance-reduction.pdf",decomp,  width = 8, height = 6)
 
 
 ## Select Final Stratification
@@ -257,7 +256,7 @@ compute_variance_decomposition(dat, strata=dat$strata,Z=NULL)
 # Document characteristics
 source("scripts/application_functions.R") 
 dat$agreement_level=factor(dat$all_agree,levels=0:1,labels=c("Some or All Disagree","All Agree"))
-dat$yhat_label=factor(dat$Yhat_binned,labels=c("<=2","2-3", "3-4","4-5","5-6",">6"))
+dat$yhat_label=factor(dat$Yhat_binned,labels=c("\\$<=$2","2-3", "3-4","4-5","5-6",">6"))
 strata_characteristics <- dat %>%
     group_by( strata,  agreement_level, yhat_label) %>%
     summarise(
@@ -305,13 +304,17 @@ kbl(strata_table, format = "latex", booktabs = TRUE,align='llllcc',
     write_file("tables/barbera_empirical_strata.tex")
 
 
-# -----------------------------------------------------------------------------
-# Estimates output from a single run across all methods (Example of practical real-world use)
-# -----------------------------------------------------------------------------
+# Estimates output from a single run across all methods (Example of practical real-world use) ----
+
 source("scripts/sim_functions.R")
+coding_fraction=0.3
+n_code=round(coding_fraction*nrow(dat))
 
 # Single sample at 30% coding budget
-single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=2026)
+single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = coding_fraction, finite_pop = FALSE,seed=2025,
+                                                    pilot_frac=1/5, pilot_select_frac=1/5,
+                                                    candidates=candidates, min_cell=1, min_pilot_cell=1)
+
 
 comparison_table <- create_comparison_table(single_estimates)
 print(comparison_table)
@@ -320,54 +323,64 @@ comparison_table=comparison_table %>% mutate(CI=sprintf("(%.3f, %.3f)", `95% CI 
     select(Method, `n Coded`, Estimate, SE, CI, `Var. Inflation`)
 
 
-kbl(comparison_table,  format = "latex", booktabs = TRUE,
-    caption = "Results from a single iteration with coding budget of h=30\\%. Variance inflation is relative to full human coding (oracle).",
-    label="barbera_point_ests",escape=F) %>%   kable_styling(latex_options = "hold_position") %>%
-    write_file("tables/barbera-ests-single-iter.tex")
-
 # Create forest plot
 oracle <- est_oracle(dat,Z=NULL)
 
-forest_plot <- create_forest_plot(single_estimates, oracle_est = oracle$est,tx=FALSE)
-print(forest_plot)
-ggsave("figures/barbera_emp_single_forest.pdf",forest_plot,  width = 8, height = 6)
-
 # Multiple samples to show variability
 
-multi_estimates <- compute_multiple_sample_estimates(dat, Z=NULL, coding_fraction = 0.30, finite_pop=F,
-                                                     n_samples = 20, seed = 2026) %>% filter(!is.na(SE))
+#multi_estimates <- compute_multiple_sample_estimates(dat, Z=NULL, coding_fraction = 0.30, finite_pop=F,
+   #                                                  n_samples = 20, seed = 2026) %>% filter(!is.na(SE))
+
+# Multiple samples to show variability
+n_samp=100
+multi_estimates <- compute_multiple_sample_estimates(dat, Z=NULL, coding_fraction =coding_fraction, finite_pop=F,
+                                                     pilot_frac=1/5, pilot_select_frac=1/5, candidates=candidates,
+                                                     n_samples = n_samp, seed = 2025, min_cell=1, min_pilot_cell=1)
 multi_summary <- create_multi_sample_summary(multi_estimates)
 print(multi_summary)
 
 
+# Combined table: single sample (left) and repeated samples (right)
+include_methods=c("Oracle","Subset","SRS","Stratified","Stratified-Yhat", "Optimal","Stratified-Random","Optimal-Permuted","Optimal-Reversed",
+                  "Pilot-Allocated-Discard", "Pilot-Allocated-Pooled",
+                  "Pilot-Selected-Prop","Pilot-Selected-Optimal")
 
-kbl(multi_summary,  format = "latex", booktabs = TRUE,  
-    caption = "Results for the Barbera corpus estimating the mean economic tone of articles from 20 separate iterations (samples) with coding budget of h=30\\%.",
-    label="barbera_multi_ests",escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
-    write_file("tables/barbera-ests-multi-iter.tex")
+barbera_tab <- write_application_table(
+    single_estimates %>% filter(method %in% include_methods),
+    multi_estimates  %>% filter(method %in% include_methods),
+    file    = "tables/barbera-ests.tex",
+    caption = sprintf("Results for the Barbera corpus estimating the mean economic tone of articles with a coding budget of $h=30\\%%$ ($n=%s$ coded documents; full coding uses all $N=%s$). 
+                      Left: estimates from a single sample. Right: averages across %s repeated samples; coverage is the share of 95\\%% confidence intervals containing the full-coding estimate, and variance inflation is the estimated variance relative to that of full human coding.
+                      Pilot-based designs use $h^{\\star}$=1/5 of the coding budget for the pilot.",
+                      n_code, nrow(dat), n_samp),
+    label   = "barbera_ests")
+print(barbera_tab)
 
 # Multi-sample forest plot
-forest_multi <- create_multi_sample_forest_plot(multi_estimates, oracle_est = oracle$est,tx=FALSE,jitter_seed=2025)
+forest_multi <- create_multi_sample_forest_plot(multi_estimates,  tx=FALSE,
+                                                oracle_est = oracle$est,jitter_seed=1234,
+                                                include_methods = c("Subset","SRS","Stratified","Stratified-Yhat", "Optimal"))
 print(forest_multi)
-ggsave("figures/barbera_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
+ggsave("figures/supplemental/barbera_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
+
+
+
 
 
 
 
 scatter=oracle_vs_precoding$scatter_plot
 
-barbera_figs=list(decomp=decomp, forest_multi=forest_multi, forest_plot=forest_plot, scatter=scatter)
+barbera_figs=list(decomp=decomp, forest_multi=forest_multi, scatter=scatter)
 names(barbera_figs)=paste0("barbera_",names(barbera_figs))
 save(barbera_figs,file="results/barbera_figs.RData")
 
 
-# -----------------------------------------------------------------------------
-# Retrospective Simulation Study
+# Retrospective Simulation Study ----
 # This is to see what would have happened in the Barbera NYT coding effort if
 # only a subsample had been coded using each method
 
 # Note: this mirrors our simulations and is just a sanity check that everything works as expected
-# -----------------------------------------------------------------------------
 
 oracle <- est_oracle(dat,Z=NULL)
 tau_oracle <- oracle$est
@@ -513,9 +526,7 @@ print(p_combined)
 ggsave("figures/BARBERA_empirical_simulation_frontiers.pdf", p_combined,
        width = 10, height = 12)
 
-# -----------------------------------------------------------------------------
-# Detailed Analysis at Target Budget
-# -----------------------------------------------------------------------------
+# Detailed Analysis at Target Budget ----
 # Filter to h = 0.30
 c=unique(results_empirical$h)[3]
 results_30 <- results_empirical %>% filter(h == c)

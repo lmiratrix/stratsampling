@@ -26,12 +26,15 @@ source(FAST_SRC)
 # Settings
 # ---------------------------------------------------------------------
 n_iter       <- 1000
-PILOT_FRAC   <- 1/3      # share of the coding budget spent on the pilot arms; NULL = no pilot arms
+PILOT_FRAC   <- 1/5      # share of the coding budget spent on the pilot arms; NULL = no pilot arms
 INCLUDE_RAND <- TRUE
 # Pilot draw for the Ind arm: FALSE = fresh pilot (one_iter_all() as
 # written, which calls one_iter_optimal_pilot() twice); TRUE = one pilot
 # shared with the Pooled arm.  Must match sim_functions.R.
-PAIRED_PILOT <- TRUE
+PAIRED_PILOT <- FALSE
+MIN_PILOT_CELL <- 1
+N_GROUPS_YHAT <- NULL    # Yhat quantile strata for Stratified-Yhat; NULL = n_strat
+
 
 param_grid <- expand.grid(
     N = 1000,
@@ -66,14 +69,16 @@ run_config <- function(pg) {
     tm <- system.time(
         res <- foreach(i = 1:nrow(pg),
                        .export = c("n_iter", "nr", "nc", "PILOT_FRAC",
-                                   "INCLUDE_RAND", "PAIRED_PILOT"),.options.RNG=1234) %dorng% {
+                                   "INCLUDE_RAND", "PAIRED_PILOT","MIN_PILOT_CELL","N_GROUPS_YHAT"),.options.RNG=1234) %dorng% {
                                        p <- pg[i, ]
                                        M <- matrix(NA_real_, n_iter * nr, nc)
                                        for (it in seq_len(n_iter)) {
                                            M[((it - 1L) * nr + 1L):(it * nr), ] <-
                                                suppressWarnings(one_iter_all_fast(p, pilot_frac = PILOT_FRAC,
                                                                                   include_rand = INCLUDE_RAND,
-                                                                                  paired_pilot = PAIRED_PILOT))
+                                                                                  paired_pilot = PAIRED_PILOT, add_selection_covs=T,
+                                                                                  min_pilot_cell=MIN_PILOT_CELL,
+                                                                                  n_groups_yhat = N_GROUPS_YHAT))
                                        }
                                        M
                                    }
@@ -106,25 +111,26 @@ run_config <- function(pg) {
         out$pilot_frac   <- PILOT_FRAC
         out$strat_choice <- CAND_NAMES[big[, 8]]       # NA except pilot-select rows
         out$n_pilot      <- big[, 9]                   # NA for the non-pilot arms
+        out$proxy_choice <- CAND_NAMES[big[, 10]]
     }
     out
 }
 
 cli::cli_h1("balanced-exact")
 results <- run_config(param_grid)
-saveRDS(results, file = "results/sim_results_balanced_exact_all_fast.rds")
+saveRDS(results, file = "results/sim_results_balanced_exact_all_fast_v2.rds")
 rm(results)
 
 cli::cli_h1("balanced-approx")
 param_grid$strata_config <- "balanced-approx"
 results2 <- run_config(param_grid)
-saveRDS(results2, file = "results/sim_results_balanced_approx_all_fast.rds")
+saveRDS(results2, file = "results/sim_results_balanced_approx_all_fast_v2.rds")
 rm(results2)
 
 cli::cli_h1("unbalanced")
 param_grid$strata_config <- "unbalanced"
 results3 <- run_config(param_grid)
-saveRDS(results3, file = "results/sim_results_unbalanced_all_fast.rds")
+saveRDS(results3, file = "results/sim_results_unbalanced_all_fast_v2.rds")
 rm(results3)
 
 # ---------------------------------------------------------------------
@@ -168,5 +174,5 @@ results.oracle <- data.frame(
     R2_target     = rep(params_oracle$R2_target, each = n_iter),
     stringsAsFactors = FALSE, row.names = NULL
 )
-saveRDS(results.oracle, file = "results/sim_results_oracle_fast.rds")
+saveRDS(results.oracle, file = "results/sim_results_oracle_fast_v2.rds")
 cli::cli_h1("done")

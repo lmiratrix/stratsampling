@@ -1068,6 +1068,18 @@ compare_decomposition_oracle <- function(data, candidates, n_code, Z = "Z") {
     # Compute residuals
     data$resid <- data$Yobs - data$Yhat
     
+    # Design-based SRS variance of the residual-mean term at this budget,
+    # summed over arms (a single arm when Z is NULL, i.e. a population mean).
+    # Uses the same equal split of n_code across arms as
+    # compute_variance_decomposition().
+    arms <- if (is.null(Z)) list(all = data$resid) else split(data$resid, data[[Z]])
+    n_per_arm <- n_code / length(arms)
+    var_srs   <- sum(vapply(arms, function(e) {
+        N_z <- length(e)
+        (N_z - n_per_arm) / (N_z * n_per_arm) * stats::var(e)
+    }, numeric(1)))
+    
+    
     # Storage for results
     summary_list <- list()
     decomposition_list <- list()
@@ -1099,7 +1111,9 @@ compare_decomposition_oracle <- function(data, candidates, n_code, Z = "Z") {
             BS_plus_WS = overall$BS_plus_WS,
             pct_BS = overall$pct_BS,
             var_ratio = overall$var_ratio,
-            var_resid = overall$var_resid
+            var_resid = overall$var_resid,
+            var_srs           = var_srs,
+            pct_var_reduction = 100 * overall$BS_minus_WS / var_srs
         )
         
         # Store full decomposition
@@ -1125,94 +1139,164 @@ compare_decomposition_oracle <- function(data, candidates, n_code, Z = "Z") {
 
 #' Plot Oracle Decomposition Comparison
 #'
-#' Creates a horizontal bar chart comparing the variance reduction (BS - WS)
-#' across candidate stratifications, with bars colored by the relative
-#' contribution of BS vs WS.
+#' Creates a horizontal bar chart comparing candidate stratifications by the
+#' variance reduction they would deliver relative to simple random sampling,
+#' using the oracle decomposition of Theorem 2 (\eqn{BS - WS}) computed from
+#' the full set of residuals by \code{\link{compare_decomposition_oracle}}.
 #'
-#' @param decomposition_result Output from \code{\link{compare_decomposition_oracle}}.
-#' @param top_n Integer specifying how many top stratifications to display.
-#'   Default is \code{NULL} (show all).
-#' @param show_components Logical. If \code{TRUE}, shows separate bars for BS
-#'   and WS. If \code{FALSE} (default), shows only BS - WS as a single bar.
+#' By default each bar shows \code{pct_var_reduction}, the expected percent
+#' reduction in the variance of the estimate relative to SRS at the coding
+#' budget passed to \code{compare_decomposition_oracle()}, i.e.
+#' \eqn{100 (BS - WS) / \mathrm{Var}_{SRS}}. This puts the figure on the same
+#' scale as the simulation results and the empirical variance inflation
+#' tables, so that a bar of 11\% can be read directly against a realized
+#' reduction of 11\% over repeated samples. Candidates with a negative value
+#' would be less precise than SRS under proportional allocation.
+#'
+#' Setting \code{selected} highlights the stratification actually chosen (for
+#' example by the pre-coding proxy diagnostic), and \code{empirical_ref} adds
+#' a reference line at the reduction realized in practice, which provides a
+#' visual check that the oracle decomposition and the repeated-sample results
+#' agree.
+#'
+#' @param decomposition_result Output from
+#'   \code{\link{compare_decomposition_oracle}}. The \code{summary} element
+#'   must contain the columns \code{stratification}, \code{BS}, \code{WS},
+#'   and \code{pct_var_reduction}.
+#' @param top_n Integer specifying how many of the top-ranked stratifications
+#'   (by \code{BS - WS}) to display. Default is \code{NULL} (show all).
+#' @param show_components Logical. If \code{TRUE}, shows separate bars for the
+#'   \code{BS} and \code{WS} components (on the raw variance scale). If
+#'   \code{FALSE} (default), shows a single bar per stratification giving the
+#'   percent variance reduction relative to SRS.
+#' @param selected Optional character string naming one stratification in
+#'   \code{decomposition_result$summary$stratification} to highlight (for
+#'   example, the candidate chosen by
+#'   \code{\link{compare_stratifications_precoding}}). Default is
+#'   \code{NULL} (no highlighting). Ignored when \code{show_components = TRUE}.
+#' @param empirical_ref Optional numeric value giving the realized percent
+#'   variance reduction relative to SRS for the selected stratification
+#'   (for example, \code{100 * (1 - VIF_strat / VIF_SRS)} from a
+#'   repeated-sampling comparison). When supplied, a dotted reference line is
+#'   drawn at this value. Default is \code{NULL}. Ignored when
+#'   \code{show_components = TRUE}.
 #'
 #' @return A ggplot object.
 #'
+#' @seealso \code{\link{compare_decomposition_oracle}},
+#'   \code{\link{compute_variance_decomposition}},
+#'   \code{\link{compare_stratifications_precoding}}
+#'
 #' @export
 plot_decomposition_comparison <- function(decomposition_result, top_n = NULL,
-                                          show_components = FALSE) {
+                                          show_components = FALSE,
+                                          selected = NULL, empirical_ref = NULL) {
     
     summary_df <- decomposition_result$summary
     
-    # Filter to top_n if specified
+    stopifnot(is.data.frame(summary_df),
+              all(c("stratification", "BS", "WS") %in% names(summary_df)))
+    
+    # Order by BS - WS (compare_decomposition_oracle() already does this, but
+    # be safe if the summary has been re-sorted) and filter to top_n
+    if (!"BS_minus_WS" %in% names(summary_df)) {
+        summary_df$BS_minus_WS <- summary_df$BS - summary_df$WS
+    }
+    summary_df <- summary_df %>% dplyr::arrange(dplyr::desc(BS_minus_WS))
     if (!is.null(top_n) && top_n < nrow(summary_df)) {
-        summary_df <- summary_df %>%
-            dplyr::slice_head(n = top_n)
+        summary_df <- summary_df %>% dplyr::slice_head(n = top_n)
     }
     
     if (show_components) {
-        # Grouped bar chart with BS and WS separate
+        
+        # ---- Grouped bar chart with BS and WS as separate bars -----------
         plot_data <- summary_df %>%
-            tidyr::pivot_longer(
-                cols = c(BS, WS),
-                names_to = "component",
-                values_to = "value"
-            ) %>%
+            tidyr::pivot_longer(cols = c(BS, WS),
+                                names_to = "component", values_to = "value") %>%
             dplyr::mutate(
-                component = factor(component, levels = c("BS", "WS")),
+                component      = factor(component, levels = c("BS", "WS")),
                 stratification = factor(stratification,
                                         levels = rev(summary_df$stratification))
             )
         
         p <- ggplot2::ggplot(plot_data,
-                             ggplot2::aes(x = stratification, y = sqrt(value), fill = component)) +
-            ggplot2::geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+                             ggplot2::aes(x = stratification, y = value,
+                                          fill = component)) +
+            ggplot2::geom_col(position = "dodge", width = 0.7) +
             ggplot2::coord_flip() +
-            ggplot2::labs(
-                title = "Variance Decomposition Components",
-                x = NULL,
-                y = "Variance Component Value",
-                fill = "Component"
-            ) +
+            ggplot2::labs(x = NULL,
+                          y = "Variance component (BS, WS)",
+                          fill = NULL) +
+            ggplot2::scale_fill_manual(values = c("BS" = "#2166AC", "WS" = "#B2182B")) +
             ggplot2::theme_minimal() +
-            ggplot2::theme(legend.position = "bottom") +
-            ggplot2::scale_fill_manual(values = c("BS" = "#2166AC", "WS" = "#B2182B"))
+            ggplot2::theme(legend.position = "bottom")
         
-    } else {
-        # Single bar chart showing BS - WS
-        plot_data <- summary_df %>%
-            dplyr::mutate(
-                stratification = factor(stratification,
-                                        levels = rev(stratification)),
-                fill_color = ifelse(BS_minus_WS > 0, "positive", "negative")
-            )
-        
-        p <- ggplot2::ggplot(plot_data,
-                             ggplot2::aes(x = stratification, y = sqrt(BS_minus_WS),
-                                          fill = fill_color)) +
-            ggplot2::geom_bar(stat = "identity", width = 0.7) +
-            ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-            ggplot2::coord_flip() +
-            ggplot2::labs(
-                title = "Variance Reduction from Stratification (BS - WS)",
-                subtitle = "Positive values indicate stratification reduces variance vs. SRS",
-                x = NULL,
-                y = "BS - WS (Variance Reduction)"
-            ) +
-            ggplot2::theme_minimal() +
-            ggplot2::theme(legend.position = "none") +
-            ggplot2::scale_fill_manual(values = c("positive" = "#2166AC", "negative" = "#B2182B"))
-        
-        # Add value labels
-        #p <- p +
-        #  ggplot2::geom_text(
-        #    ggplot2::aes(label = sprintf("%.4f", BS_minus_WS),
-        #                   hjust = ifelse(BS_minus_WS > 0, -0.1, 1.1)),
-        #     size = 3
-        # )
+        return(p)
     }
     
-    return(p)
+    # ---- Single bar per stratification: % variance reduction vs. SRS ------
+    if (!"pct_var_reduction" %in% names(summary_df)) {
+        stop("`decomposition_result$summary` has no `pct_var_reduction` column. ",
+             "Re-run compare_decomposition_oracle() with the current package version ",
+             "(it now computes the SRS variance at the supplied n_code).")
+    }
+    if (!is.null(selected) && !selected %in% summary_df$stratification) {
+        warning("`selected` = '", selected, "' is not among the displayed ",
+                "stratifications (check the name, or increase top_n); nothing highlighted.")
+        selected <- NULL
+    }
+    
+    is_sel <- if (is.null(selected)) {
+        rep(FALSE, nrow(summary_df))
+    } else {
+        summary_df$stratification == selected
+    }
+    
+    plot_data <- summary_df %>%
+        dplyr::mutate(
+            is_sel         = is_sel,
+            stratification = factor(stratification, levels = rev(stratification)),
+            role = dplyr::case_when(
+                is_sel                 ~ "Selected by proxy diagnostic",
+                pct_var_reduction >= 0 ~ "Other candidate",
+                TRUE                   ~ "Worse than SRS"
+            ),
+            role = factor(role, levels = c("Selected by proxy diagnostic",
+                                           "Other candidate", "Worse than SRS"))
+        )
+    
+    
+    p <- ggplot2::ggplot(plot_data,
+                         ggplot2::aes(x = stratification, y = pct_var_reduction,
+                                      fill = role)) +
+        ggplot2::geom_col(width = 0.7) +
+        ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+        ggplot2::coord_flip() +
+        ggplot2::scale_y_continuous(labels = function(x) paste0(x, "%")) +
+        ggplot2::scale_fill_manual(
+            values = c("Selected by proxy diagnostic" = "#B2182B",
+                       "Other candidate"              = "#2166AC",
+                       "Worse than SRS"               = "gray60"),
+            drop = TRUE
+        ) +
+        ggplot2::labs(x = NULL,
+                      y = "Expected reduction in variance relative to SRS (%)",
+                      fill = NULL) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(legend.position = "bottom")
+    
+    if (is.null(selected)) {
+        p <- p + ggplot2::theme(legend.position = "none")
+    }
+    
+    if (!is.null(empirical_ref)) {
+        p <- p +
+            ggplot2::geom_hline(yintercept = empirical_ref, linetype = "dotted",
+                                color = "black") +
+            ggplot2::annotate("text", x = 0.6, y = empirical_ref,
+                              label = "Realized over repeated samples",
+                              hjust = -0.05, vjust = 0, size = 3, color = "black")
+    }
+    
+    p
 }
-
-
-

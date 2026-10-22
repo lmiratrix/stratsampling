@@ -62,9 +62,9 @@ rm(text,grade,prom,gtxt)
 set.seed(1234)
 
 chat_indep <- chat_openai(model="gpt-4o-mini", system_prompt=rubric_indep)
-out1 <-parallel_chat_structured(chat_indep, p_indep[1:5000], type_score, max_active=2000,rpm=2000, include_cost = T) # takes 3-5 min to run
-out2 <-parallel_chat_structured(chat_indep, p_indep[5001:10000], type_score, max_active=200,rpm=1000, include_cost = T) 
-out3 <-parallel_chat_structured(chat_indep, p_indep[10001:nrow(dat_indep)], type_score, max_active=200,rpm=1000, include_cost = T) 
+out1 <-parallel_chat_structured(chat_indep, p_indep[1:5000], type_score, max_active=2000,rpm=1000, include_cost = T) # takes 3-5 min to run
+out2 <-parallel_chat_structured(chat_indep, p_indep[5001:10000], type_score, max_active=2000,rpm=1000, include_cost = T) 
+out3 <-parallel_chat_structured(chat_indep, p_indep[10001:nrow(dat_indep)], type_score, max_active=2000,rpm=1000, include_cost = T) 
 
 out_indep = rbind(out1,out2,out3)
 rm(out1,out2,out3)

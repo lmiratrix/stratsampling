@@ -63,7 +63,7 @@ type_score <- type_object(
 
 set.seed(1234)
 chat <- chat_openai(model="gpt-4o-mini", system_prompt=reads_rubric)
-out <-parallel_chat_structured(chat, p, type_score, max_active=1000,rpm=2000, include_cost = T) # takes about 2 min to run
+out <-parallel_chat_structured(chat, p, type_score, max_active=2000,rpm=2000, include_cost = T) # takes about 2 min to run
                                                                               # can go faster by increasing max_active, but this increases cost
 dat.out = select(dat, s_id, grade, subject, more, score, text) %>% mutate(LLM_score=out$quality_score, 
                                                         LLM_confidence=out$confidence_rating,
@@ -74,7 +74,7 @@ dat.out = select(dat, s_id, grade, subject, more, score, text) %>% mutate(LLM_sc
 set.seed(1234)
 
 chat2 = chat_mistral(model="ministral-3b-latest", system_prompt=reads_rubric)
-out2 <-parallel_chat_structured(chat2, p, type_score, max_active=2000,rpm=2000) # takes about 2 min to run
+out2 <-parallel_chat_structured(chat2, p, type_score, max_active=2000,rpm=2000,include_cost=T) 
 
 
 dat.out2 = select(dat, s_id, grade, more, subject, score, text) %>% mutate(LLM_score=out2$quality_score, 
@@ -83,8 +83,9 @@ dat.out2 = select(dat, s_id, grade, more, subject, score, text) %>% mutate(LLM_s
                                                        model=chat2$get_model() )
 
 
-chat3 <- chat_google_gemini(model="gemini-3.1-flash-lite", system_prompt=reads_rubric); #gemini-3-flash-preview; #gemini-3.1-flash-lite; #gemini-3.1-flash-lite-preview
-out3 <-parallel_chat_structured(chat3, p, type_score, include_cost = T, max_active=2000, rpm=2000) # takes about 2 min to run
+set.seed(1234)
+chat3 <- chat_google_gemini(model="gemini-3.1-flash-lite", system_prompt=reads_rubric)
+out3 <-parallel_chat_structured(chat3, p, type_score, max_active=2000, rpm=2000, include_cost=T) 
 
 
 dat.out3 = select(dat, s_id, grade, subject, more, score, text) %>% mutate(LLM_score=out3$quality_score, 

@@ -77,7 +77,7 @@ calc_oracle_variance = function(dat, method = c("SRS", "Stratified-Prop", "Strat
 #' @param seed Random seed for reproducibility
 #' @return Data frame with estimates from all methods plus oracle
 compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, finite_pop=FALSE, pilot_frac = NULL, seed = NULL,
-                                           pilot_select=FALSE,...) {
+                                           ...) {
     
     if (!is.null(seed)) set.seed(seed)
 
@@ -90,7 +90,7 @@ compute_single_sample_estimates = function(dat, Z="Z", coding_fraction = 0.30, f
     }
     
     # Run one iteration of all methods using the shared simulation function
-    results = one_iter_all(dat, n_code = n_code, Z = Z, finite_pop = finite_pop, pilot_frac = pilot_frac)
+    results = one_iter_all(dat, n_code = n_code, Z = Z, finite_pop = finite_pop, pilot_frac = pilot_frac,...)
     
    
     # Add oracle for comparison
@@ -150,9 +150,9 @@ create_forest_plot = function(estimates, oracle_est = NULL, tx=TRUE) {
     xlab_name = ifelse(tx, "Estimated Treatment Effect (Effect Size Units)", "Estimated Mean")
     
     # Order methods logically
-    method_order =  c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                      "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                      "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
+    method_order =  c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Yhat", "Optimal","Stratified-Random",
+                      "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Pilot-Allocated-Pooled","Pilot-Allocated-Discard",
+                      "Pilot-Selected-Prop","Pilot-Selected-Optimal")
     estimates = estimates %>%
         mutate(method = factor(method, levels = rev(method_order)))
     
@@ -197,16 +197,17 @@ create_forest_plot = function(estimates, oracle_est = NULL, tx=TRUE) {
 #' @param tx Treatment effect or mean?
 #' @param jitter_seed Optional seed for the jitter
 #' @return ggplot object
-create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, tx=TRUE, jitter_seed=NA) {
+create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, tx=TRUE, jitter_seed=NA, include_methods=NULL) {
     
     xlab_name = ifelse(tx, "Estimated Treatment Effect (Effect Size Units)", "Estimated Mean")
     
     
     # Order methods logically
-    method_order =   c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                       "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                       "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
+    method_order =   c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Yhat", "Optimal","Stratified-Random",
+                       "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Pilot-Allocated-Pooled","Pilot-Allocated-Discard",
+                       "Pilot-Selected-Prop","Pilot-Selected-Optimal")
     
+
     # Separate oracle (only need one) from other methods
     oracle_data = multi_estimates %>%
         filter(method == "Oracle") %>%
@@ -219,6 +220,10 @@ create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, t
             method = factor(method, levels = rev(method_order)),
             sample_id = factor(sample_id)
         )
+    
+    if (!is.null(include_methods)){
+        other_data = other_data %>% filter(method %in% include_methods)
+    }
     
     
     avg_data = other_data %>%
@@ -301,9 +306,9 @@ create_multi_sample_forest_plot = function(multi_estimates, oracle_est = NULL, t
 #' @return Formatted data frame
 create_comparison_table = function(estimates) {
     
-    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                     "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
+    method_order = c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Yhat", "Optimal","Stratified-Random",
+                     "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Pilot-Allocated-Pooled","Pilot-Allocated-Discard",
+                     "Pilot-Selected-Prop","Pilot-Selected-Optimal")
     
     oracle_se = estimates$SE[estimates$method == "Oracle"]
     
@@ -337,9 +342,9 @@ create_comparison_table = function(estimates) {
 #' @return Summary data frame
 create_multi_sample_summary = function(multi_estimates) {
     
-    method_order =  c("Oracle", "Subset", "SRS", "Stratified", "Optimal","Stratified-Random",
-                      "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Optimal-Pilot-Pooled","Optimal-Pilot-Ind",
-                      "Stratified-PilotSelect","Optimal-PilotSelect","Pilot+Optimal-PilotSelect","Pilot+Stratified-PilotSelect")
+    method_order =  c("Oracle", "Subset", "SRS", "Stratified", "Stratified-Yhat", "Optimal","Stratified-Random",
+                      "Optimal-Permuted","Optimal-Reversed","Optimal-Random","Pilot-Allocated-Pooled","Pilot-Allocated-Discard",
+                      "Pilot-Selected-Prop","Pilot-Selected-Optimal")
     
     oracle_data = multi_estimates %>%
         filter(method == "Oracle") %>%
@@ -383,4 +388,106 @@ label_below_caption <- function(tex, label) {
     sub("(?m)^(\\\\caption\\{.*\\})[ \t]*$",
         paste0("\\1\n\\\\label{tab:", label, "}"),
         tex, perl = TRUE)
+}
+
+application_groups <- list(
+    "core" = c(
+        "Oracle"     = "Full coding (oracle)",
+        "Subset"     = "Subset",
+        "SRS"        = "SRS",
+        "Stratified" = "Stratified (proxy-selected strata)",
+        "Stratified-Yhat" = "Stratified (Yhat quantile strata)",
+        "Optimal"    = "Optimal (oracle variances)"),
+    "Misinformed designs" = c(
+        "Stratified-Random" = "Stratified-Random",
+        "Optimal-Permuted"  = "Optimal-Permuted",
+        "Optimal-Reversed"  = "Optimal-Reversed"),
+    "Pilot-based allocation" = c(
+        "Pilot-Allocated-Pooled" = "Pilot-allocated (pilot pooled)",
+        "Pilot-Allocated-Discard"    = "Pilot-allocated (pilot discarded)"),
+    "Pilot-based selection" = c(
+        "Pilot-Selected-Prop" = "Pilot-selected (proportional allocation)",
+        "Pilot-Selected-Optimal"    = "Pilot-selected (optimal allocation)")
+)
+
+
+#' Write the two-panel application table (single sample | repeated samples)
+#'
+#' Left panel: point estimate, estimated SE and 95% CI from one sample.
+#' Right panel, across the repeated samples: mean point estimate, mean
+#' estimated SE, coverage of the 95% CI and mean variance inflation.  Coverage
+#' is for the full-coding (oracle) estimate, the design-based target; variance
+#' inflation is (SEhat / SE of the full-coding estimate)^2, computed per sample
+#' and then averaged.
+#'
+#' @param single_estimates Data frame from compute_single_sample_estimates()
+#' @param multi_estimates Data frame from compute_multiple_sample_estimates()
+#' @param file Path of the .tex file to write
+#' @param caption LaTeX caption
+#' @param label Table label (without the "tab:" prefix)
+#' @param digits Decimals for estimates, SEs and CI limits
+#' @param groups Row groups / labels (see application_groups)
+#' @return The summary data frame behind the table (invisibly)
+write_application_table = function(single_estimates, multi_estimates, file, caption="", label="",
+                                   digits = 3, groups = application_groups) {
+    
+    oracle_est = multi_estimates$est[multi_estimates$method == "Oracle"][1]
+    oracle_se  = multi_estimates$SE[multi_estimates$method == "Oracle"][1]
+    n_samples  = dplyr::n_distinct(multi_estimates$sample_id)
+    
+    multi = multi_estimates %>%
+        group_by(method) %>%
+        summarise(mean_est = mean(est),
+                  mean_SE  = mean(SE),
+                  coverage = mean(ci_lower <= oracle_est & ci_upper >= oracle_est),
+                  var_infl = mean((SE / oracle_se)^2),
+                  .groups = "drop")
+    
+    tab = single_estimates %>%
+        select(method, est, SE, ci_lower, ci_upper) %>%
+        inner_join(multi, by = "method")
+    
+    num = function(x) formatC(x, format = "f", digits = digits)
+    
+    group_rows = function(group_name) {
+        labs = groups[[group_name]]
+        labs = labs[names(labs) %in% tab$method]
+        if (length(labs) == 0) return(NULL)
+        d = tab[match(names(labs), tab$method), ]
+        is_oracle = d$method == "Oracle"
+        rows = sprintf("%s & %s & %s & (%s, %s) & %s & %s & %s & %s \\\\ ",
+                       labs, num(d$est), num(d$SE), num(d$ci_lower), num(d$ci_upper),
+                       num(d$mean_est), num(d$mean_SE),
+                       ifelse(is_oracle, "--", paste0(formatC(100 * d$coverage, format = "f", digits = 1), "\\%")),
+                       formatC(d$var_infl, format = "f", digits = 2))
+        if (group_name == "core") return(rows)
+        c("\\addlinespace",
+          sprintf("\\multicolumn{8}{l}{\\underline{\\textit{%s}}} \\\\ ", group_name),
+          rows)
+    }
+    
+    out = c("\\begin{table}[!h]",
+      "\\centering",
+      sprintf("\\caption{%s}", caption),
+      sprintf("\\label{tab:%s}", label),
+      "\\resizebox{\\linewidth}{!}{",   # 8 columns + long design labels overflow \\linewidth otherwise
+      "\\begin{tabular}{lrrcrrrr}",
+      "\\toprule",
+      sprintf(" & \\multicolumn{3}{c}{Single sample} & \\multicolumn{4}{c}{Repeated samples ($R = %d$)} \\\\ ", n_samples),
+      "\\cmidrule(lr){2-4} \\cmidrule(lr){5-8}",
+      "Method & Est. & $\\widehat{SE}$ & 95\\% CI & Mean Est. & Mean $\\widehat{SE}$ & Coverage & Var. Infl. \\\\ ",
+      "\\midrule\\addlinespace[2.5pt]",
+      unlist(lapply(names(groups), group_rows)),
+      "\\bottomrule",
+      "\\end{tabular}}",
+      "\\end{table}") 
+    
+    if (!is.null(file)){
+        out %>%
+        writeLines(file)}
+    else {
+        print(tab)
+    }
+    
+    invisible(tab)
 }

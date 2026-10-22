@@ -63,7 +63,46 @@ one_iter_strat = function(dat, n_code, Z="Z", finite_pop=FALSE){
   out.strat
 }
 
-
+# One iteration calculating the model-assisted estimator under stratified sampling
+# where the strata are QUANTILE CUTS OF YHAT (a feasible design: uses only
+# pre-coding information) instead of the true strata, with the number sampled
+# in each stratum proportional to stratum size.
+#
+# Cuts are made within treatment arm (make_quantile_strata_by_arm(), the same
+# construction create_stratification_candidates() uses with cut_by_arm = TRUE),
+# so each arm is split into n_groups equal-size strata. With Z = NULL the cuts
+# are pooled. n_groups defaults to the number of true strata, so the comparison
+# with "Stratified" holds the number of strata fixed.
+# If the cuts cannot be formed (e.g., a discrete Yhat with fewer than n_groups
+# distinct values), returns an NA row with a warning instead of stopping.
+one_iter_yhat_strat = function(dat, n_code, Z="Z", n_groups=NULL, finite_pop=FALSE){
+    require( stratsampling ) # for parallel code
+    
+    if (is.null(n_groups)) {
+        n_groups = dplyr::n_distinct(dat$strata)
+    }
+    z_vec = if (!is.null(Z)) dat[[Z]] else NULL
+    
+    strata_yhat = stratsampling:::make_quantile_strata_by_arm(dat$Yhat, z_vec,
+                                                              n_groups = n_groups,
+                                                              var_name = "Yhat")
+    if (is.null(strata_yhat)) {
+        warning("Stratified-Yhat: could not form ", n_groups,
+                " Yhat quantile strata; returning NA.")
+        return(data.frame(est = NA_real_, SE = NA_real_, SEhat = NA_real_,
+                          SEhat.full = NA_real_, SEhat.samp = NA_real_))
+    }
+    dat$strata_yhat = strata_yhat
+    
+    dat$S = generate_sample_index(dat, n_code,
+                                  Z=Z, strata="strata_yhat" )
+    
+    out.strat = est_ma_strat( dat,
+                              Yhat = "Yhat", S = "S", Z = Z,
+                              strata = "strata_yhat" , finite_pop=finite_pop)
+    
+    out.strat
+}
 
 # One iteration calculating the model-assisted estimator under stratified sampling using RANDOMLY PERMUTED (incorrect) stratification variable
 # with number sampled in each strata proportional to strata size
@@ -173,6 +212,7 @@ one_iter_optimal_pilot = function(dat, n_code, pilot_frac = 0.05,
     if ( pool_pilot ) {
         # Wave 2 tops the pilot up to the total budget; estimate on the
         # combined sample.
+        n_est = n_code
         dat.strat = calc_optimal_allocation( dat, n_code,
                                              Z = Z, strata = "strata",
                                              var_alloc = vt,
@@ -181,14 +221,19 @@ one_iter_optimal_pilot = function(dat, n_code, pilot_frac = 0.05,
         # Fresh stratified sample of the remaining budget from the full
         # population; the pilot is discarded from estimation.
         n_pilot_realized = sum( dat$S_pilot )
+        n_est = n_code-n_pilot_realized
+        
         dat.strat = calc_optimal_allocation( dat, n_code - n_pilot_realized,
                                              Z = Z, strata = "strata",
                                              var_alloc = vt )
     }
     
-    est_ma_strat( dat.strat,
+    out = est_ma_strat( dat.strat,
                   Yhat = "Yhat", S = "S", Z = Z,
-                  strata = "strata", finite_pop = finite_pop )
+                  strata = "strata", finite_pop = finite_pop ) %>%
+        mutate(n_pilot = n_pilot,
+               n_est = n_est)
+    out
 }
 
 
@@ -197,7 +242,8 @@ one_iter_optimal_pilot = function(dat, n_code, pilot_frac = 0.05,
 
 # Function to compute all three types of model-assisted estimators, plus bad-design versions and pilot-based variants in one pass
 one_iter_all <- function(dat, n_code, Z="Z", finite_pop=FALSE, 
-                         include_rand=TRUE, pilot_frac=NULL) {
+                         include_rand=TRUE, pilot_frac=NULL, pilot_select_frac=NULL, candidates=NULL,
+                         n_groups_yhat=NULL,...) {
     require( stratsampling ) # for parallel code
     
     
@@ -220,6 +266,9 @@ one_iter_all <- function(dat, n_code, Z="Z", finite_pop=FALSE,
     out.strat_opt = one_iter_optimal_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
     out.strat_opt$method = "Optimal"
     
+    #### PROPORTIONAL STRATIFIED ESTIMATOR (YHAT-QUANTILE STRATA) ####
+    out.strat_yhat = one_iter_yhat_strat(dat, n_code, Z=Z, n_groups=n_groups_yhat, finite_pop=finite_pop)
+    out.strat_yhat$method = "Stratified-Yhat"
     
     #### PROPORTIONAL STRATIFIED ESTIMATOR (WRONG STRATA) ####
     out.strat_random = one_iter_random_strat(dat, n_code, Z=Z, finite_pop=finite_pop)
@@ -235,7 +284,7 @@ one_iter_all <- function(dat, n_code, Z="Z", finite_pop=FALSE,
     
     
     
-    out_combined = bind_rows(out.subset, out.srs, out.strat_prop, out.strat_opt,
+    out_combined = bind_rows(out.subset, out.srs, out.strat_prop, out.strat_opt,out.strat_yhat,
                              out.strat_random, out.strat_opt_perm, out.strat_opt_rev) 
     
     if (include_rand){
@@ -247,24 +296,26 @@ one_iter_all <- function(dat, n_code, Z="Z", finite_pop=FALSE,
         
     }
     
+    if (is.null(candidates)){candidates=NULL}
     
     if ( !is.null( pilot_frac ) ) {
         out.strat_pilot_pool = one_iter_optimal_pilot(dat, n_code,
                                                       pilot_frac = pilot_frac,
                                                       Z = Z, finite_pop = finite_pop,
                                                       pool_pilot = T)
-        out.strat_pilot_pool$method = "Optimal-Pilot-Pooled"
+        out.strat_pilot_pool$method = "Pilot-Allocated-Pooled"
         
         out.strat_pilot_ind = one_iter_optimal_pilot(dat, n_code,
                                                      pilot_frac = pilot_frac,
                                                      Z = Z, finite_pop = finite_pop,
                                                      pool_pilot = F)
-        out.strat_pilot_ind$method = "Optimal-Pilot-Ind"
+        out.strat_pilot_ind$method = "Pilot-Allocated-Discard"
         
+
+        if (is.null(pilot_select_frac)){pilot_select_frac=pilot_frac}
         
-        
-        out.pilot_select = suppressWarnings(one_iter_pilot_select(dat, n_code, candidates=NULL, pilot_select_frac=pilot_frac,
-                                                                  Z=Z, finite_pop=finite_pop))
+        out.pilot_select = suppressWarnings(one_iter_pilot_select(dat, n_code, candidates=candidates, pilot_select_frac=pilot_select_frac,
+                                                                  Z=Z, finite_pop=finite_pop,...))
         
         out_combined = bind_rows(out_combined, out.strat_pilot_pool,out.strat_pilot_ind, out.pilot_select)
         out_combined$pilot_frac = pilot_frac
@@ -335,6 +386,9 @@ combine_estimators <- function( est1, est2 ) {
 }
 
 
+
+
+
 ## Pilot-Selected stratification
 #
 # Another possibility: pilot-SELECTED stratification. The stratification is not
@@ -370,7 +424,10 @@ one_iter_pilot_select = function(dat, n_code, candidates,
                                  pilot_select_frac = 0.05,
                                  Z = "Z", Yhat = "Yhat", Yobs = "Yobs",
                                  finite_pop = FALSE,
-                                 min_cell = 0) {
+                                 min_cell = 0,
+                                 min_pilot_cell=0,
+                                 combine_estimators=FALSE,
+                                 add_selection_covs = FALSE) {
     require( stratsampling )
     
     if (!is.null(Z)){
@@ -391,20 +448,36 @@ one_iter_pilot_select = function(dat, n_code, candidates,
     # Choose the stratification via the pilot-mode diagnostic.
     # Candidates the pilot cannot evaluate (NA pilot spread) sort last
     # and are never chosen.
+    cust=NULL
     
+    if (add_selection_covs){
+        cust = list("strata_true" = dat$strata,
+                    "strata_noisy" = dat$strata_noisy,
+                    "strata_random" = dat$strata_random)
+    }
     if (is.null(candidates)){
-        candidates = create_stratification_candidates(dat,vars="Yhat",Z=Z,verbose=F)
+        candidates = create_stratification_candidates(dat,vars="Yhat",Z=Z,
+                                                      custom=cust,cross_custom = F,
+                                                      verbose=F)
     }
     cmp = compare_stratifications_precoding( dat, candidates, Z = Z,
-                                             Yobs = Yobs, S = "S_pilot" )
+                                             Yobs = Yobs, S = "S_pilot",shrink=TRUE )
+    # What proxy mode (Yhat only, no outcomes) would have picked from the same candidates
+    proxy_best = cmp$stratification[[ which.max( cmp$mean_spread ) ]]
    
-    # Possibly subset to strata that need at least a given size of units?
+    # Possibly subset to strata that have at least a given size of units?
     # TODO/QUESTION: Not following this logic
     if ( min_cell > 0 ) {
         cmp_f = cmp %>% filter( min_stratum_size >= min_cell )
         if ( nrow(cmp_f) > 0 ) { 
           cmp = cmp_f 
         }
+    }
+    
+    # (b) after the existing `if ( min_cell > 0 ) {...}` block
+    if ( min_pilot_cell > 0 && "min_pilot_cell" %in% names(cmp) ) {
+        cmp_f = cmp %>% filter( !is.na(min_pilot_cell), min_pilot_cell >= !!min_pilot_cell )
+        if ( nrow(cmp_f) > 0 ) cmp = cmp_f
     }
     
     # Select stratification
@@ -430,7 +503,7 @@ one_iter_pilot_select = function(dat, n_code, candidates,
     dat$S = generate_sample_index( dat, n_main, Z = Z, strata = "pilot_strata" )
     out.prop = est_ma_strat( dat, Yhat = Yhat, S = "S", Z = Z,
                              strata = "pilot_strata", finite_pop = finite_pop )
-    out.prop$method = "Stratified-PilotSelect"
+    out.prop$method = "Pilot-Selected-Prop"
     
     # (b) Optimal allocation with pilot-estimated variances
     vt = estimate_pilot_variances( dat, S = "S_pilot",
@@ -440,17 +513,28 @@ one_iter_pilot_select = function(dat, n_code, candidates,
                                        var_alloc = vt )
     out.opt = est_ma_strat( dat.opt, Yhat = Yhat, S = "S", Z = Z,
                             strata = "pilot_strata", finite_pop = finite_pop )
-    out.opt$method = "Optimal-PilotSelect"
+    out.opt$method = "Pilot-Selected-Optimal"
     
     
     # Pooling Wave (1) and Wave (2)
+    if (combine_estimators){
     out.prop.pool = combine_estimators( out.wave1, out.prop )
     out.opt.pool = combine_estimators( out.wave1, out.opt )
     
     bind_rows( out.prop, out.opt, out.prop.pool, out.opt.pool ) %>%
-        mutate( strat_choice = best,
+        mutate( strat_choice = best,       
+                proxy_choice = proxy_best,
                 n_pilot = n_pilot ) %>%
         relocate( method )
+    }
+    else{
+        bind_rows( out.prop, out.opt ) %>%
+            mutate( strat_choice = best,
+                    proxy_choice = proxy_best,
+                    n_pilot = n_pilot,
+                    n_est = n_main) %>%
+            relocate( method )
+    }
 }
 
 
@@ -477,3 +561,7 @@ if ( FALSE ) {
                                      pilot_select_frac = 0.05,
                                      Z = "Z", Yhat = "Yhat", Yobs = "Yobs" )
 }
+
+
+
+
