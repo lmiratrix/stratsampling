@@ -236,6 +236,9 @@ generate_population <- function(N,
         mutate( ID = 1:n() ) %>%
         dplyr::relocate( Z, strata, ID ) 
     
+    
+    dat = add_selection_covariates(dat)
+    
     return(dat)
 }
 
@@ -340,6 +343,21 @@ describe_population <- function(n_strat,
     invisible( agg )
 }
 
+
+#' Add the two extra covariates the pilot can choose from
+add_selection_covariates <- function(dat, noise_rate = 0.25, n_levels_null = NULL) {
+    lev <- sort(unique(dat$strata)); K <- length(lev); N <- nrow(dat)
+    if (is.null(n_levels_null)) n_levels_null <- K
+    lab  <- match(dat$strata, lev)
+    flip <- which(runif(N) < noise_rate)
+    if (length(flip) > 0) {
+        shift <- sample.int(K - 1, length(flip), replace = TRUE)
+        lab[flip] <- ((lab[flip] - 1 + shift) %% K) + 1
+    }
+    dat$strata_noisy = factor(lev[lab], levels = lev)
+    dat$strata_random = factor(sample.int(n_levels_null, N, replace = TRUE))
+    dat
+}
 
 
 

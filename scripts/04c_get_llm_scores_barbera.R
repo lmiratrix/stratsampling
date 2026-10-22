@@ -186,7 +186,7 @@ Article segment:
 # -----------------------------------------------------------------------------
 # Score all articles in batches ----
 # -----------------------------------------------------------------------------
-
+set.seed(1234)
 chat <- chat_openai(model="gpt-4o-mini", system_prompt=rubric_barbera)
 
 out1 <-parallel_chat_structured(chat, p[1:2000], type_score, max_active=1000,rpm=2000, include_cost = T) # takes 3-5 min to run

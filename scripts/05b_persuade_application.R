@@ -12,7 +12,7 @@ library(gt)
 
 #library(plyr)
 
-
+##  Data cleaning and summary measures ----
 # Load the data
 load("generated data/persuade-data-with-all-LLM-predictions.RData")
 all.pred$ehat.mean=rowMeans(all.pred %>% select(starts_with("Yhat.conf_")))
@@ -100,9 +100,7 @@ p3 <- ggplot(dat, aes(x = Yhat, y = abs_resid)) +
 gridExtra::grid.arrange(p1, p2, p3, nrow = 3)
 #ggsave("figures/persuade_empirical_prediction_quality.pdf",  width = 10, height = 12)
 
-# -----------------------------------------------------------------------------
-#  Explore Potential Stratification Variables
-# -----------------------------------------------------------------------------
+#  Explore Potential Stratification Variables ------------------
 
 # Create categorical versions
 dat <- dat %>%
@@ -183,6 +181,8 @@ gridExtra::grid.arrange(p_length, p_pred, p_conf, ncol= 3)
 #  gridExtra::grid.arrange(p_length, p_pred, nrow = 2)#,
 # width = 10, height = 8)
 
+#  Create Candidate Stratifications ----
+
 ##  Create and Evaluate Candidate Stratifications
 library(stratsampling)
 
@@ -196,7 +196,8 @@ dat$essay_length = cut(dat$word_count,breaks=c(0,median(dat$word_count),Inf))
 
 
 # Create candidate stratifications
-candidates <- create_stratification_candidates(dat,vars = c("Yhat", "n_distinct_Yhat", "ehat", "word_count","all_agree"), seed=12345)
+candidates <- create_stratification_candidates(dat,vars = c("Yhat_raw", "n_distinct_Yhat", "ehat", "word_count","all_agree"), seed=12345)
+
 candidates$Yhat_binned_word_count_6x2 = interaction(dat$Yhat_binned,dat$essay_length)
 
 candidates$Yhat_binned=dat$Yhat_binned
@@ -213,6 +214,7 @@ rm_ind = which(min_n==1)
 
 candidates = candidates[-c(rm_ind)]
 
+#  Compare Candidates using Oracle Information ----
 # Evaluate all candidates
 comparison_oracle <- compare_stratifications(dat, candidates, Z=NULL, min_var_threshold = 0.01) # comparison using residuals (not feasible in practice)
 comparison_precoding <- compare_stratifications_precoding(dat, candidates,Z=NULL) # comparison based on Yhat only (can be done before coding has started)
@@ -243,16 +245,16 @@ oracle_vs_precoding <- compare_oracle_vs_precoding(
 
 # View scatter plot
 print(oracle_vs_precoding$scatter_plot)
-ggsave("figures/persuade_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
+ggsave("figures/supplemental/persuade_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
 
 
 # Compare variance decomposition oracle vs. precoding
-results <- compare_decomposition_oracle(dat, candidates, n_code = floor(0.3*nrow(dat)),Z=NULL)
+results <- compare_decomposition_oracle(dat,candidates, n_code = floor(0.3*nrow(dat)),Z=NULL)
 results$summary  # View table
 
-decomp=plot_decomposition_comparison(results,show_components = F)
+decomp=plot_decomposition_comparison(results,show_components = F,selected="Yhat_binned_word_count_6x2",top_n=30)
 decomp
-ggsave("figures/persuade_precoding_strat_variance-reduction.pdf",decomp,  width = 8, height = 6)
+ggsave("figures/supplemental/persuade_precoding_strat_variance-reduction.pdf",decomp,  width = 8, height = 6)
 
 
 ## Select Final Stratification
@@ -269,7 +271,6 @@ compute_variance_decomposition(dat, strata=dat$strata,Z=NULL)
 dat$essay_length = as.numeric(cut(dat$word_count,breaks=c(0,median(dat$word_count),Inf)))
 
 dat$essay_length=factor(dat$essay_length,levels=1:2,labels=c("Low","High"))
-
 # Document characteristics
 strata_characteristics <- dat %>%
     group_by( strata, essay_length, Yhat_binned) %>%
@@ -289,6 +290,8 @@ print(strata_characteristics)
 
 
 ## Output Stratification Characteristics Table
+source("scripts/application_functions.R")  # From previous code
+
 strata_table <- strata_characteristics %>% arrange(essay_length, Yhat_binned) %>% 
     mutate(
        k= row_number(),
@@ -311,20 +314,20 @@ strata_table <- strata_characteristics %>% arrange(essay_length, Yhat_binned) %>
 
 
 
-kbl(strata_table, format = "latex", booktabs = TRUE,  label="persuade_strat",
+kbl(strata_table, format = "latex", booktabs = TRUE,  
     caption = "Characteristics of final stratification for the PERSUADE corpus determined by word count (low vs. high) and (binned) predicted quality score.",
-    linesep="",escape=FALSE) %>% 
+    linesep="",escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
+    label_below_caption("persuade_strat") %>%
     write_file("tables/persuade_empirical_strata.tex")
 
 
-# -----------------------------------------------------------------------------
-# Estimates output from a single run across all methods (Example of practical real-world use)
-# -----------------------------------------------------------------------------
-source("scripts/application_functions.R")  # From previous code
+# Estimates output from a single run across all methods (Example of practical real-world use) ----
+
 source("scripts/sim_functions.R")
 
 # Single sample at 30% coding budget
-single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=2025)
+single_estimates <- compute_single_sample_estimates(dat, Z=NULL, coding_fraction = 0.3, finite_pop = FALSE,seed=2025,pilot_frac=1/5,pilot_select_frac=1/5,
+                                                    candidates=candidates, min_cell=1, min_pilot_cell=1)
 
 comparison_table <- create_comparison_table(single_estimates)
 print(comparison_table)
@@ -333,52 +336,54 @@ comparison_table=comparison_table %>% mutate(CI=sprintf("(%.3f, %.3f)", `95% CI 
     select(Method, `n Coded`, Estimate, SE, CI, `Var. Inflation`)
 
 
-kbl(comparison_table,  format = "latex", booktabs = TRUE,  
-    caption = "Results from a single iteration with coding budget of h=30\\%. Variance inflation is relative to full human coding (oracle).",
-    label="persuade_point_ests",escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
-    write_file("tables/persuade-ests-single-iter.tex")
-
-# Create forest plot
 oracle <- est_oracle(dat,Z=NULL)
 
-forest_plot <- create_forest_plot(single_estimates, oracle_est = oracle$est,tx=FALSE)
-print(forest_plot)
-ggsave("figures/persuade_emp_single_forest.pdf",forest_plot,  width = 8, height = 6)
-
 # Multiple samples to show variability
-
-multi_estimates <- compute_multiple_sample_estimates(dat, Z=NULL, coding_fraction = 0.30, finite_pop=F,
-                                                     n_samples = 20, seed = 2025)
+n_samp=100
+coding_fraction=0.30
+n_code=round(coding_fraction*nrow(dat))
+multi_estimates <- compute_multiple_sample_estimates(dat, Z=NULL, coding_fraction =coding_fraction, finite_pop=F,
+                                                     pilot_frac=1/5, pilot_select_frac=1/5, min_cell=1, min_pilot_cell=1, candidates=candidates,
+                                                     n_samples = n_samp, seed = 2025)
 multi_summary <- create_multi_sample_summary(multi_estimates)
 print(multi_summary)
 
 
-kbl(multi_summary,  format = "latex", booktabs = TRUE,  
-    caption = "Results for the PERSUADE corpus estimating the mean writing quality score from 20 separate iterations (samples) with coding budget of h=30\\%.",
-    label="persuade_multi_ests",escape=F) %>%   kable_styling(latex_options = "hold_position") %>% 
-    write_file("tables/persuade-ests-multi-iter.tex")
 
+# Combined table: single sample (left) and repeated samples (right)
+include_methods=c("Oracle","Subset","SRS","Stratified","Stratified-Yhat", "Optimal","Stratified-Random","Optimal-Permuted","Optimal-Reversed",
+                  "Pilot-Allocated-Discard", "Pilot-Allocated-Pooled",
+                  "Pilot-Selected-Prop","Pilot-Selected-Optimal")
+persuade_tab <- write_application_table(
+    single_estimates %>% filter(method %in% include_methods),
+    multi_estimates  %>% filter(method %in% include_methods),
+    file    = "tables/persuade-ests.tex",
+    caption = sprintf("Results for the PERSUADE corpus estimating the mean writing quality score with a coding budget of $h=30\\%%$ ($n=%s$ coded documents; full coding uses all $N=%s$). 
+                      Left: estimates from a single sample. Right: averages across %s repeated samples; coverage is the share of 95\\%% confidence intervals containing the full-coding estimate, and variance inflation is the estimated variance relative to that of full human coding. 
+                      Pilot-based designs use $h^{\\star}$=1/5 of the coding budget for the pilot.",
+                      n_code, nrow(dat), n_samp),
+    label   = "persuade_ests")
+print(persuade_tab)
 
 # Multi-sample forest plot
-forest_multi <- create_multi_sample_forest_plot(multi_estimates, oracle_est = oracle$est,tx=FALSE,jitter_seed=2025)
+forest_multi <- create_multi_sample_forest_plot(multi_estimates,  tx=FALSE,
+                                                oracle_est = oracle$est,jitter_seed=1234,
+                                                include_methods = c("Subset","SRS","Stratified","Stratified-Yhat", "Optimal"))
 print(forest_multi)
-ggsave("figures/persuade_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
+ggsave("figures/supplemental/persuade_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
 
 
 scatter=oracle_vs_precoding$scatter_plot
 
 
-persuade_figs=list(decomp=decomp, forest_multi=forest_multi, forest_plot=forest_plot, scatter=scatter)
+persuade_figs=list(decomp=decomp, forest_multi=forest_multi,scatter=scatter)
 names(persuade_figs)=paste0("persuade_",names(persuade_figs))
 save(persuade_figs,file="results/persuade_figs.RData")
 
 
-# -----------------------------------------------------------------------------
-# Retrospective Simulation Study
-# This is to see what would have happened in READS study if they had coded only a subsample using each method
-
+# Retrospective Simulation Study ----
+# This is to see what would have happened in PERSUADE if they had coded only a subsample using each method
 # Note: this mirrors our simulations and is just a sanity check that everything works as expected
-# -----------------------------------------------------------------------------
 
 oracle <- est_oracle(dat,Z=NULL)
 tau_oracle <- oracle$est
@@ -524,9 +529,7 @@ print(p_combined)
 ggsave("figures/PERSUADE_empirical_simulation_frontiers.pdf", p_combined,
        width = 10, height = 12)
 
-# -----------------------------------------------------------------------------
-# Detailed Analysis at Target Budget
-# -----------------------------------------------------------------------------
+# Detailed Analysis at Target Budget ----
 # Filter to h = 0.30
 c=unique(results_empirical$h)[3]
 results_30 <- results_empirical %>% filter(h == c)

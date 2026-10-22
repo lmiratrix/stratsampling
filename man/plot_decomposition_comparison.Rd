@@ -7,23 +7,65 @@
 plot_decomposition_comparison(
   decomposition_result,
   top_n = NULL,
-  show_components = FALSE
+  show_components = FALSE,
+  selected = NULL,
+  empirical_ref = NULL
 )
 }
 \arguments{
-\item{decomposition_result}{Output from \code{\link{compare_decomposition_oracle}}.}
+\item{decomposition_result}{Output from
+\code{\link{compare_decomposition_oracle}}. The \code{summary} element
+must contain the columns \code{stratification}, \code{BS}, \code{WS},
+and \code{pct_var_reduction}.}
 
-\item{top_n}{Integer specifying how many top stratifications to display.
-Default is \code{NULL} (show all).}
+\item{top_n}{Integer specifying how many of the top-ranked stratifications
+(by \code{BS - WS}) to display. Default is \code{NULL} (show all).}
 
-\item{show_components}{Logical. If \code{TRUE}, shows separate bars for BS
-and WS. If \code{FALSE} (default), shows only BS - WS as a single bar.}
+\item{show_components}{Logical. If \code{TRUE}, shows separate bars for the
+\code{BS} and \code{WS} components (on the raw variance scale). If
+\code{FALSE} (default), shows a single bar per stratification giving the
+percent variance reduction relative to SRS.}
+
+\item{selected}{Optional character string naming one stratification in
+\code{decomposition_result$summary$stratification} to highlight (for
+example, the candidate chosen by
+\code{\link{compare_stratifications_precoding}}). Default is
+\code{NULL} (no highlighting). Ignored when \code{show_components = TRUE}.}
+
+\item{empirical_ref}{Optional numeric value giving the realized percent
+variance reduction relative to SRS for the selected stratification
+(for example, \code{100 * (1 - VIF_strat / VIF_SRS)} from a
+repeated-sampling comparison). When supplied, a dotted reference line is
+drawn at this value. Default is \code{NULL}. Ignored when
+\code{show_components = TRUE}.}
 }
 \value{
 A ggplot object.
 }
 \description{
-Creates a horizontal bar chart comparing the variance reduction (BS - WS)
-across candidate stratifications, with bars colored by the relative
-contribution of BS vs WS.
+Creates a horizontal bar chart comparing candidate stratifications by the
+variance reduction they would deliver relative to simple random sampling,
+using the oracle decomposition of Theorem 2 (\eqn{BS - WS}) computed from
+the full set of residuals by \code{\link{compare_decomposition_oracle}}.
+}
+\details{
+By default each bar shows \code{pct_var_reduction}, the expected percent
+reduction in the variance of the estimate relative to SRS at the coding
+budget passed to \code{compare_decomposition_oracle()}, i.e.
+\eqn{100 (BS - WS) / \mathrm{Var}_{SRS}}. This puts the figure on the same
+scale as the simulation results and the empirical variance inflation
+tables, so that a bar of 11\\% can be read directly against a realized
+reduction of 11\\% over repeated samples. Candidates with a negative value
+would be less precise than SRS under proportional allocation.
+
+Setting \code{selected} highlights the stratification actually chosen (for
+example by the pre-coding proxy diagnostic), and \code{empirical_ref} adds
+a reference line at the reduction realized in practice, which provides a
+visual check that the oracle decomposition and the repeated-sample results
+agree.
+}
+\seealso{
+\code{\link{compare_decomposition_oracle}},
+\code{\link{compute_variance_decomposition}},
+\code{\link{compare_stratifications_precoding}}
 }

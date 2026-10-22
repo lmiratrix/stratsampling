@@ -5,21 +5,27 @@ library(patchwork)
 
 # A consistent color palette for methods
 method_pal <- c(
-    "Subset"      = "slategray2",
-    "SRS"         = "#228222",
-    "Stratified"  = "#1f77b4",
-    "Stratified-Random" = "purple3",
-    "Optimal"     = "#ff6961",
-    "Optimal-Permuted"  = "#e6842a",
-    "Optimal-Random"  = "#8c1a11",
-    "Optimal-Reversed" = "goldenrod",
-    "Full coding" = "black"
-)
+    "Subset"                  = "black",
+    "SRS"                     = "#666666",
+    "Stratified"              = "#1f77b4",   # true-strata family (blue)
+    "Stratified-Random"       = "#1f77b4",
+    "Optimal"                 = "#EE6677",   # oracle-optimal family (red)
+    "Optimal-Permuted"        = "#EE6677",
+    "Optimal-Random"          = "#EE6677",
+    "Optimal-Reversed"        = "#8C1A11",   # darkest red: the anti-informative floor
+    "Stratified-Yhat"         = "#228833",   # Yhat-only family (green)
+    "Pilot-Allocated-Pooled"  = "#B8860B",   # pilot-allocated family (gold)
+    "Pilot-Allocated-Discard" = "#B8860B",
+    "Pilot-Selected-Prop"     = "#7B3294",   # pilot-selected family (purple)
+    "Pilot-Selected-Optimal"  = "#7B3294",
+    "Full coding" = "black", "Oracle" = "black")
+
 
 method_levels <- c(
     "Subset",
     "SRS",
     "Stratified",
+    "Stratified-Yhat",
     "Stratified-Random",
     "Optimal",
     "Optimal-Random",
@@ -30,15 +36,15 @@ method_levels <- c(
 
 
 # Load simulation results
-results1=readRDS("results/sim_results_balanced_exact_all_fast.rds")
-results2=readRDS("results/sim_results_balanced_approx_all_fast.rds")
-results3=readRDS("results/sim_results_unbalanced_all_fast.rds")
+results1=readRDS("results/sim_results_balanced_exact_all_fast_v2.rds")
+results2=readRDS("results/sim_results_balanced_approx_all_fast_v2.rds")
+results3=readRDS("results/sim_results_unbalanced_all_fast_v2.rds")
 
 results=rbind(results1,results2,results3)
 
 
 
-results_oracle <- readRDS("results/sim_results_oracle_fast.rds")
+results_oracle <- readRDS("results/sim_results_oracle_fast_v2.rds")
 
 
 

@@ -6,111 +6,84 @@ method_levels <- c(
     "SRS",
     "Stratified",
     "Stratified-Random",
+    "Stratified-Yhat",
     "Optimal",
     "Optimal-Permuted",
     "Optimal-Random",
     "Optimal-Reversed",
-    "Optimal-Pilot-Pooled",          # Case 2: strata known, pilot estimates variances, pilot pooled
-    "Optimal-Pilot-Ind",             # Case 2, pilot discarded (robustness arm)
-    "Stratified-PilotSelect",        # Case 1: SRS pilot selects the strata; proportional wave 2
-    "Optimal-PilotSelect",           # Case 1, Neyman wave 2 on EB-shrunk pilot variances (Sep 15 sim_functions.R)
-    "Pilot+Stratified-PilotSelect",  # Case 1, proportional wave 2 precision-combined with the pilot estimate
-    "Pilot+Optimal-PilotSelect",     # Case 1, Neyman wave 2 precision-combined with the pilot estimate
-    "Optimal-PilotSelect-Shrink",    # legacy label (pre-Sep-15 results files only)
-    "Full coding"
+    "Pilot-Allocated-Pooled",          # Case 2: strata known, pilot estimates variances, pilot pooled
+    "Pilot-Allocated-Discard",             # Case 2, pilot discarded (robustness arm)
+    "Pilot-Selected-Prop",        # Case 1: SRS pilot selects the strata; proportional wave 2
+    "Pilot-Selected-Optimal",           # Case 1: SRS pilot selects strata; Neyman wave 2 on EB-shrunk pilot variances
+    "Full coding",
+    "Oracle"                         # application scripts' name for full coding (same colour)
 )
 
 # Human-readable legend labels (use via method_scales(use_labels = TRUE);
 # the existing plot helpers keep the raw method names so that figures
 # already in the manuscript do not change).
 method_labels <- c(
-    "Subset"                     = "Subset (coded units only)",
+    "Subset"                     = "Subset",
     "SRS"                        = "SRS",
-    "Stratified"                 = "Proportional allocation",
-    "Stratified-Random"          = "Proportional (random strata)",
+    "Stratified"                 = "Stratified",
+    "Stratified-Random"          = "Stratified (random strata)",
     "Optimal"                    = "Optimal (oracle variances)",
+    "Stratified-Yhat"   = "Stratified (Yhat quantile strata)",  # method_labels
     "Optimal-Permuted"           = "Optimal (permuted variances)",
     "Optimal-Random"             = "Optimal (random variances)",
     "Optimal-Reversed"           = "Optimal (reversed variances)",
-    "Optimal-Pilot-Pooled"       = "Optimal (pilot variances, pooled)",
-    "Optimal-Pilot-Ind"          = "Optimal (pilot variances, discarded)",
-    "Stratified-PilotSelect"     = "Proportional (pilot-selected strata)",
-    "Optimal-PilotSelect"        = "Optimal (pilot-selected strata)",
-    "Pilot+Stratified-PilotSelect" = "Proportional (pilot-selected strata) + pilot estimate",
-    "Pilot+Optimal-PilotSelect"    = "Optimal (pilot-selected strata) + pilot estimate",
-    "Optimal-PilotSelect-Shrink" = "Optimal (pilot-selected strata, shrunk var.; legacy)",
-    "Full coding"                = "Full coding"
+    "Pilot-Allocated-Pooled"       = "Pilot-allocated (pooled)",
+    "Pilot-Allocated-Discard"          = "Pilot-allocated (discarded)",
+    "Pilot-Selected-Prop"     = "Pilot-selected (proportional allocation)",
+    "Pilot-Selected-Optimal"        = "Pilot-selected (optimal allocation)",
+    "Full coding"                = "Full coding",
+    "Oracle"                     = "Oracle"
 )
 
 # Groups used to subset the registry in the new pilot figures
-pilot_case2_methods <- c("Optimal-Pilot-Pooled", "Optimal-Pilot-Ind")
-pilot_case1_methods <- c("Stratified-PilotSelect", "Optimal-PilotSelect",
-                         "Pilot+Stratified-PilotSelect", "Pilot+Optimal-PilotSelect")
+pilot_case2_methods <- c("Pilot-Allocated-Pooled", "Pilot-Allocated-Discard")
+pilot_case1_methods <- c("Pilot-Selected-Prop", "Pilot-Selected-Optimal")
 pilot_methods       <- c(pilot_case2_methods, pilot_case1_methods)
 
 # A consistent color palette for methods
 method_pal <- c(
-    "Subset"      = "black", #"#9467bd",
-    "SRS"         = "#228222",
-    "Stratified"  = "#1f77b4",
-    "Stratified-Random" = "purple3",
-    "Optimal"     = "#ff6961",
-    "Optimal-Permuted"  = "#e6842a",
-    "Optimal-Random"  = "#8c1a11",
-    "Optimal-Reversed" = "goldenrod",
-    "Optimal-Pilot-Pooled"       = "#17becf",
-    "Optimal-Pilot-Ind"          = "#7f7f7f",
-    "Stratified-PilotSelect"     = "#08306b",
-    "Optimal-PilotSelect"        = "#762a83",
-    "Pilot+Stratified-PilotSelect" = "#4292c6",
-    "Pilot+Optimal-PilotSelect"    = "#c51b7d",
-    "Optimal-PilotSelect-Shrink" = "#762a83",
-    "Full coding" = "black"
-)
+    "Subset"                  = "black",
+    "SRS"                     = "#666666",
+    "Stratified"              = "#1f77b4",   # true-strata family (blue)
+    "Stratified-Random"       = "#1f77b4",
+    "Optimal"                 = "#EE6677",   # oracle-optimal family (red)
+    "Optimal-Permuted"        = "#EE6677",
+    "Optimal-Random"          = "#EE6677",
+    "Optimal-Reversed"        = "#8C1A11",   # darkest red: the anti-informative floor
+    "Stratified-Yhat"         = "#228833",   # Yhat-only family (green)
+    "Pilot-Allocated-Pooled"  = "#B8860B",   # pilot-allocated family (gold)
+    "Pilot-Allocated-Discard" = "#B8860B",
+    "Pilot-Selected-Prop"     = "#7B3294",   # pilot-selected family (purple)
+    "Pilot-Selected-Optimal"  = "#7B3294",
+    "Full coding" = "black", "Oracle" = "black")
+
 
 method_shapes <- c(
-    "Subset"      = 4,
-    "SRS"         = 16,
-    "Stratified"  = 17,
-    "Optimal"     = 15,
-    "Stratified-Random" = 2,
-    "Optimal-Permuted"  = 0,
-    "Optimal-Random" = 7,
-    "Optimal-Reversed"  = 7,
-    "Optimal-Pilot-Pooled"       = 18,
-    "Optimal-Pilot-Ind"          = 5,
-    "Stratified-PilotSelect"     = 6,
-    "Optimal-PilotSelect"        = 13,
-    "Pilot+Stratified-PilotSelect" = 25,
-    "Pilot+Optimal-PilotSelect"    = 3,
-    "Optimal-PilotSelect-Shrink" = 13,
-    "Full coding" = 8
-)
-
-# Line type palette (distinct line types for each method)
+    "Subset" = 4, "SRS" = 16,
+    "Stratified" = 17, "Stratified-Random" = 2,
+    "Optimal" = 15, "Optimal-Permuted" = 0, "Optimal-Random" = 1, "Optimal-Reversed" = 7,
+    "Stratified-Yhat" = 18,
+    "Pilot-Allocated-Pooled" = 16, "Pilot-Allocated-Discard" = 0,
+    "Pilot-Selected-Prop" = 17, "Pilot-Selected-Optimal" = 5,
+    "Full coding" = 8, "Oracle" = 8)
 method_linetypes <- c(
-    "Subset"      = "dotted",
-    "SRS"         = "solid",
-    "Stratified"  = "dashed",
-    "Optimal"     = "longdash",
-    "Stratified-Random" = "twodash",
-    "Optimal-Permuted"  = "42",
-    "Optimal-Random" = "4212",
-    "Optimal-Reversed"  = "4212",
-    "Optimal-Pilot-Pooled"       = "solid",
-    "Optimal-Pilot-Ind"          = "twodash",
-    "Stratified-PilotSelect"     = "1343",
-    "Optimal-PilotSelect"        = "solid",
-    "Pilot+Stratified-PilotSelect" = "1343",
-    "Pilot+Optimal-PilotSelect"    = "3313",
-    "Optimal-PilotSelect-Shrink" = "solid",
-    "Full coding" = "dotdash"
-)
+    "Subset" = "dotted", "SRS" = "solid",
+    "Stratified" = "solid", "Stratified-Random" = "dotted",
+    "Optimal" = "longdash", "Optimal-Permuted" = "dotted", "Optimal-Random" = "4212", "Optimal-Reversed" = "42",
+    "Stratified-Yhat" = "dotdash",
+    "Pilot-Allocated-Pooled" = "solid", "Pilot-Allocated-Discard" = "22",
+    "Pilot-Selected-Prop" = "solid", "Pilot-Selected-Optimal" = "22",
+    "Full coding" = "dotdash", "Oracle" = "dotdash")
 
 # One call that adds the colour / shape / linetype scales for methods.
 # use_labels = TRUE swaps the raw method names for method_labels in the
 # legend (new pilot figures); the default keeps the legacy legends.
-method_scales <- function(use_labels = FALSE, name = "Method", nrow = NULL) {
+method_scales <- function(use_labels = FALSE, name = "Method:", nrow = NULL) {
     lab <- if (use_labels) method_labels else waiver()
     list(
         scale_color_manual(name = name, values = method_pal, labels = lab, drop = TRUE),
@@ -121,6 +94,8 @@ method_scales <- function(use_labels = FALSE, name = "Method", nrow = NULL) {
                                    linetype = guide_legend(nrow = nrow))
     )
 }
+
+
 
 
 
@@ -206,9 +181,9 @@ make_frontier_plot <- function(df, r2_val = NULL, facet = "bias~residual_var",
     
     # Apply colorblind-friendly scales (color + shape + linetype)
     out <- out +
-        scale_color_manual(name = "Method", values = method_pal) +
-        scale_shape_manual(name = "Method", values = method_shapes) +
-        scale_linetype_manual(name = "Method", values = method_linetypes) +
+        scale_color_manual(name = "Method:", values = method_pal) +
+        scale_shape_manual(name = "Method:", values = method_shapes) +
+        scale_linetype_manual(name = "Method:", values = method_linetypes) +
         scale_x_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0.05, 0.95),
                            labels = percent_format(accuracy = 1)) +
         xlab("Proportion coded") +
@@ -223,11 +198,9 @@ make_frontier_plot <- function(df, r2_val = NULL, facet = "bias~residual_var",
 
 make_delta_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
                             bias_vals = NULL, smooth = FALSE,
-                            methods=c("Stratified", "Optimal")) {
+                            methods=c("Stratified", "Optimal")) { 
     base <- df %>%
-        filter(method %in% methods) %>%
-        #mutate(method = fct_relevel(method, "Stratified", "Optimal")) %>%
-        select(all_of(cell_keys), method, pct_var_red_vs_SRS)
+        filter(method %in% methods)
     
     if (!is.null(bias_vals)) {
         base <- base %>% filter(bias %in% bias_vals)
@@ -257,9 +230,9 @@ make_delta_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
     
     # Apply colorblind-friendly scales
     g <- g +
-        scale_color_manual(name = "Method", values = method_pal) +
-        scale_shape_manual(name = "Method", values = method_shapes) +
-        scale_linetype_manual(name = "Method", values = method_linetypes) +
+        scale_color_manual(name = "Method:", values = method_pal) +
+        scale_shape_manual(name = "Method:", values = method_shapes) +
+        scale_linetype_manual(name = "Method:", values = method_linetypes) +
         scale_x_continuous(breaks = seq(0, 1, by = 0.2),
                            labels = percent_format(accuracy = 1), limits = c(0.05, 0.95)) +
         scale_y_continuous(breaks = seq(-100, 100, by = 20),oob=scales::squish,
@@ -270,10 +243,11 @@ make_delta_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
         ylab("% Reduction in Empirical Variance vs. SRS") +
         ggtitle(glue::glue("Incremental value of stratified sampling vs SRS (R-squared target = {r2_val})")) +
         theme_minimal() +
-        theme(legend.position = "bottom")
+        theme(legend.position = "bottom", panel.grid.minor=element_blank())
     
     return(g)
 }
+
 
 
 
@@ -343,9 +317,9 @@ make_full_ratio_plot <- function(df, facet = "bias~residual_var", r2_val = NULL,
         geom_line(linewidth = 1.0) +
         geom_point(size = 2.5) +
         facet_grid(facet, labeller = labs_all) +
-        scale_color_manual(name = "Method", values = method_pal) +
-        scale_shape_manual(name = "Method", values = method_shapes) +
-        scale_linetype_manual(name = "Method", values = method_linetypes) +
+        scale_color_manual(name = "Method:", values = method_pal) +
+        scale_shape_manual(name = "Method:", values = method_shapes) +
+        scale_linetype_manual(name = "Method:", values = method_linetypes) +
         scale_x_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0.05, 0.95),
                            labels = percent_format(accuracy = 1)) +
         xlab("Proportion coded") +
@@ -374,7 +348,7 @@ make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, b
         geom_hline(yintercept = 0.95, linetype = 2, color = "grey50") +
         geom_line() + geom_point(size = 1) +
         facet_grid(facet, labeller = labs_all) +
-        scale_color_manual(name = "Method", values = method_pal) +
+        scale_color_manual(name = "Method:", values = method_pal) +
         scale_x_continuous(breaks = seq(0, 1, by = 0.2), 
                            labels = percent_format(accuracy = 1), 
                            limits = c(0.05, 0.95)) +
@@ -387,6 +361,46 @@ make_coverage_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, b
         theme(legend.position = "bottom", panel.grid.minor = element_blank())
 }
 
+
+
+make_pilot_plot <- function(dat, refs, pilot, facet, ylim = c(-30, 65)) {
+    show <- c(refs, pilot)
+    d <- dat %>%
+        filter(method %in% show) %>%
+        mutate(method = factor(as.character(method), levels = show))
+    ggplot(d, aes(coding_frac, pct_var_red_vs_SRS,
+                  colour = method, linetype = method, shape = method)) +
+        geom_hline(yintercept = 0, colour = "grey60", linewidth = 0.4) +
+        geom_line(data = ~ filter(.x, method %in% pilot), linewidth = 0.8) +
+        geom_point(data = ~ filter(.x, method %in% pilot), size = 2.1, fill = "white", stroke = 0.9) +  # pilot arms only
+        geom_line(data = ~ filter(.x, method %in% refs), linewidth = 1.4, alpha = 0.75) +            # references: line only, no symbols
+        facet_grid(facet, labeller = labs_all) +
+        scale_colour_manual(values = method_pal[show], breaks = show,
+                            labels = method_labels[show], name = NULL) +
+        scale_linetype_manual(values = method_linetypes[show], breaks = show,
+                              labels = method_labels[show], name = NULL) +
+        scale_shape_manual(values = method_shapes[show], breaks = show,
+                           labels = method_labels[show], name = NULL, na.value = NA) +
+        scale_x_continuous(breaks = seq(0.2, 0.8, by = 0.2),
+                           labels = percent_format(accuracy = 1), limits = c(0.05, 0.95)) +
+        scale_y_continuous(breaks = seq(-20, 60, by = 20), limits = ylim,
+                           oob = scales::squish, labels = percent_format(scale = 1)) +
+        # legend keys mirror the plot: references are thick, semi-transparent
+        # lines with no symbol; pilot arms are thin lines with their symbol
+        guides(colour = guide_legend(
+                                     override.aes = list(
+                                         shape     = ifelse(show %in% refs, NA, unname(method_shapes[show])),
+                                         linetype  = unname(method_linetypes[show]),
+                                         linewidth = ifelse(show %in% refs, 1.4, 0.8),
+                                         alpha     = ifelse(show %in% refs, 0.75, 1))),
+               linetype = "none", shape = "none") +
+        labs(x = "Proportion coded", y = "% reduction in empirical variance vs. SRS") +
+        theme_minimal(base_size = 10) +
+        theme(legend.position = "bottom", legend.key.width = unit(1.6, "lines"),
+              legend.text = element_text(size = 8.5),
+              panel.grid.minor = element_blank(), 
+              strip.text = element_text(size = 9), panel.spacing.x = unit(0.7, "lines"))
+}
 
 make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_vals = NULL,
                            methods = c("Subset", "SRS", "Stratified", "Optimal")) {
@@ -405,7 +419,7 @@ make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_
         geom_hline(yintercept = 0, linetype = 2, color = "grey50") +
         geom_line() + geom_point(size = 1) +
         facet_grid(facet, labeller = labs_all) +
-        scale_color_manual(name = "Method", values = method_pal) +
+        scale_color_manual(name = "Method:", values = method_pal) +
         scale_x_continuous(breaks = seq(0, 1, by = 0.2), 
                            labels = percent_format(accuracy = 1), 
                            limits = c(0.05, 0.95)) +
@@ -414,4 +428,100 @@ make_bias_plot <- function(df, facet = "bias~residual_var", r2_val = NULL, bias_
         ggtitle(glue::glue("Estimator bias across simulation scenarios{ifelse(!is.null(r2_val), paste0(' (R² target = ', r2_val, ')'), '')}")) +
         theme_minimal() +
         theme(legend.position = "bottom", panel.grid.minor = element_blank())
+}
+
+
+
+
+# CI half-width multiplier used to score coverage. 
+Z_CRIT <-2
+
+# Default number of paired bootstrap replicates and the seed, so that
+# every table in the paper reproduces exactly.
+BOOT_B    <- 1000
+BOOT_SEED <- 20260916
+
+
+# Fail loudly if a "cell" is not really one population: the iteration id
+# must be unique within (cell x method).  Without this, stacking several
+# results files and forgetting a key (e.g. strata_config) silently pools
+# different populations into one variance.
+check_unique_iterations <- function(raw, cell_keys, where = "") {
+    dup <- raw %>%
+        count(across(all_of(c(cell_keys, "method", ".n")))) %>%
+        filter(n > 1)
+    if (nrow(dup)) {
+        stop(sprintf(paste0("%s: iteration id `.n` is not unique within cell x method ",
+                            "(%d duplicated keys). A cell key is probably missing; ",
+                            "keys used: %s"),
+                     where, nrow(dup), paste(cell_keys, collapse = ", ")), call. = FALSE)
+    }
+    invisible(TRUE)
+}
+
+
+
+# ---------------------------------------------------------------------
+# Per-cell summaries of simulation results
+# ---------------------------------------------------------------------
+
+#' Summarise raw per-iteration results to one row per (cell x method)
+#'
+#' @param raw long results as written by 01/02 (one row per iteration x
+#'   method), with columns `.n`, `method`, `est`, `SE`, `SEhat`, `tau`.
+#' @param cell_keys character vector naming the columns that define a
+#'   simulation cell (everything except `method` and `.n`).
+#' @return one row per cell x method with the Monte Carlo summaries.
+#'
+#' Coverage is scored against the cell's own `tau`
+cell_summary <- function(raw, cell_keys) {
+    stopifnot(all(c("method", "est", "SEhat", "tau") %in% names(raw)))
+    raw %>%
+        filter(!is.na(est), !is.na(SEhat)) %>%
+        mutate(
+            CI_lower = est - Z_CRIT * SEhat,
+            CI_upper = est + Z_CRIT * SEhat,
+            covers   = if_else(CI_lower < tau & CI_upper > tau, 1L, 0L)
+        ) %>%
+        group_by(across(all_of(c(cell_keys, "method")))) %>%
+        summarise(
+            n_iter     = n(),
+            mean_est   = mean(est),
+            bias_est   = mean(est - tau),
+            coverage   = mean(covers),
+            emp_var    = var(est),
+            emp_se     = sd(est),
+            mean_se    = mean(SE),
+            mean_sehat = mean(SEhat),
+            mse        = mean((est - tau)^2),
+            .groups    = "drop"
+        )
+}
+
+
+#' Aggregate cell-level variances to a variance ratio against a reference
+#'
+#'
+#' @param cells output of cell_summary() (or anything with `method` and
+#'   the column named by `value`).
+#' @param ref name of the reference method (denominator).
+#' @param by character vector of columns to aggregate WITHIN (the ratio
+#'   is computed separately for each combination).  Empty = one number.
+#' @param value the variance column to aggregate.
+#' @return one row per `by` x method, with `mean_var`, `vr` and
+#'   `pct_red` (= 100 * (1 - vr)).
+agg_vr <- function(cells, ref = "SRS", by = character(0), value = "emp_var") {
+    stopifnot(ref %in% unique(as.character(cells$method)))
+    num <- cells %>%
+        group_by(across(all_of(c(by, "method")))) %>%
+        summarise(mean_var = mean(.data[[value]], na.rm = TRUE),
+                  n_cells  = sum(!is.na(.data[[value]])),
+                  .groups  = "drop")
+    den <- num %>%
+        filter(as.character(method) == ref) %>%
+        select(all_of(by), mean_var_ref = mean_var)
+    out <- if (length(by)) left_join(num, den, by = by) else
+        mutate(num, mean_var_ref = den$mean_var_ref[1])
+    out %>% mutate(vr = mean_var / mean_var_ref,
+                   pct_red = 100 * (1 - vr))
 }

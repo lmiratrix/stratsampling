@@ -242,16 +242,16 @@ oracle_vs_precoding <- compare_oracle_vs_precoding(
 
 # View scatter plot
 print(oracle_vs_precoding$scatter_plot)
-ggsave("figures/READS_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
+ggsave("figures/supplemental/READS_precoding_strat_validation.pdf",oracle_vs_precoding$scatter_plot,  width = 8, height = 6)
 
 
 
 # Compare variance decomposition oracle vs. precoding
 results <- compare_decomposition_oracle(dat, candidates, n_code = floor(0.3*nrow(dat)),Z="Z")
 results$summary  # View table
-reads_decomp=plot_decomposition_comparison(results,show_components = F, top_n=40)
+reads_decomp=plot_decomposition_comparison(results,show_components = F, top_n=30,selected="Yhat_binned")
 reads_decomp
-ggsave("figures/READS_precoding_strat_variance-reduction.pdf",reads_decomp,  width = 8, height = 6)
+ggsave("figures/supplemental/READS_precoding_strat_variance-reduction.pdf",reads_decomp,  width = 8, height = 6)
 
 
 ## Select Final Stratification
@@ -313,7 +313,7 @@ n_code = round(coding_fraction * nrow(dat)/ 2) * 2
 pilot_cell_min = 1
 
 set.seed(2025)
-n_pilot=round(0.05 * nrow(dat)/2)*2
+n_pilot=round(0.10 * nrow(dat)/2)*2
 
 dat$S_pilot = generate_sample_index( dat, n_pilot, Z = "Z", strata = NULL )
 
@@ -349,14 +349,14 @@ pilot_val_plot <- ggplot(ranking_val%>%filter(!is.na(pilot_spread)), aes(x = pil
         x = expression("Pilot estimate: " * Var(bar(e)[k])),
         y = expression("Oracle: " * Var(bar(e)[k])),
         title = "Validation of Pilot-Based vs. Oracle Stratification Metrics",
-        subtitle = sprintf("5%% SRS pilot; Spearman correlation = %.3f (proxy = %.3f)",
+        subtitle = sprintf("10%% SRS pilot; Spearman correlation = %.3f (proxy = %.3f)",
                            cor_pilot_oracle, cor_proxy_oracle),
         color = "Min pilot n\nper stratum"
     ) +
     theme_minimal() +
     scale_color_viridis_c()
 print(pilot_val_plot)
-ggsave("figures/READS_pilot_strat_validation.pdf", pilot_val_plot,
+ggsave("figures/supplemental/READS_pilot_strat_validation.pdf", pilot_val_plot,
        width = 8, height = 6)
 
 
@@ -364,15 +364,16 @@ ggsave("figures/READS_pilot_strat_validation.pdf", pilot_val_plot,
 # Estimates output from a single run across all methods (Example of practical real-world use) ----
 
 # Single sample at 30% coding budget (first not including methods using small pilot for stratification selection)
-include_methods=c("Oracle","Subset","SRS","Stratified","Optimal","Stratified-Random","Optimal-Permuted","Optimal-Reversed","Optimal-Pilot-Ind",
-                  "Optimal-Pilot-Pooled","Stratified-PilotSelect","Optimal-PilotSelect")
+include_methods=c("Oracle","Subset","SRS","Stratified","Stratified-Yhat", "Optimal","Stratified-Random","Optimal-Permuted","Optimal-Reversed",
+                  "Pilot-Allocated-Discard", "Pilot-Allocated-Pooled",
+                  "Pilot-Selected-Prop","Pilot-Selected-Optimal")
 
 set.seed(2025)
-compute_single_sample_estimates(dat, coding_fraction = coding_fraction, finite_pop=FALSE,pilot_frac=10/30) 
+compute_single_sample_estimates(dat, coding_fraction = coding_fraction, finite_pop=FALSE,pilot_frac=1/5) 
 
 set.seed(2025) # with pilot-based stratification selection
-single_estimates <- compute_single_sample_estimates(dat, coding_fraction = coding_fraction, finite_pop=FALSE,pilot_frac=10/30,
-                            candidates=candidates, pilot_select_frac=0.05,min_cell=1)
+single_estimates <- compute_single_sample_estimates(dat, coding_fraction = coding_fraction, finite_pop=FALSE,pilot_frac=1/5,
+                            candidates=candidates, min_cell=1, min_pilot_cell=1, pilot_select_frac=1/5)
 
 
 comparison_table <- create_comparison_table(single_estimates)
@@ -385,13 +386,6 @@ comparison_table=comparison_table %>%
   select(Method, `n Coded`, Estimate, SE, CI, `Var. Inflation`)
 comparison_table
 
-kbl(comparison_table,  format = "latex", booktabs = TRUE,  
-    caption = "Results for the MORE study estimating the impact of the MORE intervention on writing quality scores from a single iteration with coding budget of h=30\\%. Variance inflation is relative to full human coding (oracle).",
-   escape=F) %>%   
-    kable_styling(latex_options = "hold_position") %>% 
-    label_below_caption("reads_point_ests_v2") %>%
-  write_file("tables/READS-ests-single-iter.tex")
-
 
 # Create forest plot
 oracle <- est_oracle(dat)
@@ -399,7 +393,8 @@ oracle <- est_oracle(dat)
 # Multiple samples to show variability
 n_samp=100
 multi_estimates <- compute_multiple_sample_estimates(dat, coding_fraction =coding_fraction, 
-                                                     n_samples = n_samp, seed = 2026, finite_pop=F, pilot_frac=10/30)
+                                                     n_samples = n_samp, seed = 2026, finite_pop=F, pilot_frac=1/5, 
+                                                     min_cell=1, min_pilot_cell=1, pilot_select_frac=1/5)
 multi_summary <- create_multi_sample_summary(multi_estimates)
 
 
@@ -407,19 +402,28 @@ multi_summary = multi_summary %>% filter(Method%in%include_methods)
 print(multi_summary)
 
 
-kbl(multi_summary,  format = "latex", booktabs = TRUE,  
-    caption = sprintf("Results for the MORE study estimating the impact of the MORE intervention on writing quality scores across %s iterations (samples) with coding budget of h=30%%. Pilot-based optimal allocation uses 1/3 of the coding budget for the pilot.",
-                      n_samp),
-    escape=F) %>%   
-    kable_styling(latex_options = "hold_position") %>% 
-    label_below_caption("reads_multi_ests") %>%
-    
-    write_file("tables/READS-ests-multi-iter.tex")
+
+# Combined table: single sample (left) and repeated samples (right)
+reads_tab <- write_application_table(
+    single_estimates %>% filter(method %in% include_methods),
+    multi_estimates  %>% filter(method %in% include_methods),
+    file    = "tables/READS-ests.tex",
+    caption = sprintf("Results for the MORE study estimating the impact of the MORE intervention on writing quality scores with a coding budget of $h=30\\%%$ ($n=%s$ coded documents; 
+                      full coding uses all $N=%s$). Left: estimates from a single sample. Right: averages across %s repeated samples; 
+                      coverage is the share of 95\\%% confidence intervals containing the full-coding estimate, and variance inflation is the estimated variance relative to that of full human coding. 
+                      Pilot-based designs use $h^{\\star}$=1/5 of the coding budget for the pilot.",
+                      n_code, nrow(dat), n_samp),
+    label   = "reads_ests")
+print(reads_tab)
+
 
 
 # Multi-sample forest plot
-forest_multi <- create_multi_sample_forest_plot(multi_estimates %>%  filter(method%in% include_methods), 
-                                                oracle_est = oracle$est,jitter_seed=1234)
+forest_multi <- create_multi_sample_forest_plot(multi_estimates, 
+                                                oracle_est = oracle$est,jitter_seed=1234,
+                                                include_methods = c("Subset","SRS","Stratified","Stratified-Yhat", "Optimal" #,
+                                                                    #"Optimal-Pilot-Pooled", "Stratified-PilotSelect", "Optimal-PilotSelect"
+                                                                    ))
 print(forest_multi)
 ggsave("figures/supplemental/READS_emp_multi_forest.pdf",forest_multi,  width = 8, height = 6)
 
