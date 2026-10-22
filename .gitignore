@@ -5,6 +5,7 @@
 .DS_Store
 figures/
 raw data/
+generated data/
 results/
 NAMESPACE
 tables/
